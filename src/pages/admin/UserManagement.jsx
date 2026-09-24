@@ -11,9 +11,6 @@ import {
 import Swal from 'sweetalert2';
 import { motion, AnimatePresence } from 'framer-motion';
 
-/* ────────────────────────────────────────────────────────────
-   DESIGN TOKENS — shared visual language with the Admin Dashboard
-   ──────────────────────────────────────────────────────────── */
 const T = {
   bg:        '#050D10',
   ink:       '#08191D',
@@ -57,9 +54,7 @@ const toast = (icon, title, text = '') => Swal.mixin({
 
 const swalTheme = { background: T.ink2, color: T.text, confirmButtonColor: T.gold };
 
-/* ────────────────────────────────────────────────────────────
-   PRIMITIVES
-   ──────────────────────────────────────────────────────────── */
+
 const CountUp = ({ value, format }) => {
   const [display, setDisplay] = useState(0);
   useEffect(() => {
@@ -205,9 +200,6 @@ const RoleBadge = ({ role, pulse }) => {
   );
 };
 
-/* ────────────────────────────────────────────────────────────
-   MODAL SHELL
-   ──────────────────────────────────────────────────────────── */
 const ModalShell = ({ open, onClose, title, subtitle, icon, children, width = 520, closeOnBackdrop = true }) => (
   <AnimatePresence>
     {open && (
@@ -265,9 +257,6 @@ const ModalShell = ({ open, onClose, title, subtitle, icon, children, width = 52
   </AnimatePresence>
 );
 
-/* ────────────────────────────────────────────────────────────
-   OVERVIEW CARD
-   ──────────────────────────────────────────────────────────── */
 const OverviewCard = ({ label, value, icon, color, delay = 0 }) => {
   const [hovered, setHovered] = useState(false);
   return (
@@ -304,9 +293,6 @@ const OverviewCard = ({ label, value, icon, color, delay = 0 }) => {
   );
 };
 
-/* ────────────────────────────────────────────────────────────
-   SEGMENTED ROLE FILTER (sliding indicator)
-   ──────────────────────────────────────────────────────────── */
 const RoleSegmented = ({ value, onChange, counts, total }) => (
   <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', padding: 4, borderRadius: 12, background: T.surface, border: `1px solid ${T.border}` }}>
     {ROLES.map((r) => {
@@ -346,9 +332,6 @@ const RoleSegmented = ({ value, onChange, counts, total }) => (
   </div>
 );
 
-/* ────────────────────────────────────────────────────────────
-   PERSONNEL ROW (card-like)
-   ──────────────────────────────────────────────────────────── */
 const PersonnelRow = ({ user, index, onView, onEdit, onCycleRole, onDelete }) => {
   const [hovered, setHovered] = useState(false);
   const meta = roleMeta(user.role);
@@ -382,7 +365,7 @@ const PersonnelRow = ({ user, index, onView, onEdit, onCycleRole, onDelete }) =>
         boxShadow: hovered ? '0 14px 34px rgba(0,0,0,0.35), 0 0 0 1px rgba(232,176,0,0.06)' : 'none',
       }}
     >
-      {/* Personnel */}
+      {}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
         <Avatar firstName={user.first_name} lastName={user.last_name} color={meta.color} />
         <div style={{ minWidth: 0 }}>
@@ -391,22 +374,22 @@ const PersonnelRow = ({ user, index, onView, onEdit, onCycleRole, onDelete }) =>
         </div>
       </div>
 
-      {/* Role */}
+      {}
       <div><RoleBadge role={user.role} /></div>
 
-      {/* Email */}
+      {}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: T.sub, fontWeight: 500, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
         <Mail size={12} style={{ opacity: 0.55, flexShrink: 0 }} />
         {user.email || '—'}
       </div>
 
-      {/* Registered */}
+      {}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: T.sub, fontFamily: 'monospace' }}>
         <Calendar size={11} style={{ opacity: 0.55 }} />
         {user.created_at ? new Date(user.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
       </div>
 
-      {/* Actions */}
+      {}
       <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
         {actions.map((a, i) => (
           <div key={i} style={{ position: 'relative' }} className="um-tooltip-wrap">
@@ -434,9 +417,6 @@ const PersonnelRow = ({ user, index, onView, onEdit, onCycleRole, onDelete }) =>
   );
 };
 
-/* ────────────────────────────────────────────────────────────
-   ADD PERSONNEL WIZARD
-   ──────────────────────────────────────────────────────────── */
 const WIZARD_STEPS = [
   { key: 'personal',    label: 'Personal',    icon: <User size={14} /> },
   { key: 'credentials', label: 'Credentials', icon: <Lock size={14} /> },
@@ -613,9 +593,6 @@ const AddPersonnelWizard = ({ isOpen, onClose, onSubmit, submitting }) => {
   );
 };
 
-/* ────────────────────────────────────────────────────────────
-   EDIT PERSONNEL WORKSPACE (current → editable → live preview)
-   ──────────────────────────────────────────────────────────── */
 const EditPersonnelWorkspace = ({ isOpen, onClose, user, onSubmit, submitting }) => {
   const [form, setForm] = useState(EMPTY_EDIT);
 
@@ -635,7 +612,7 @@ const EditPersonnelWorkspace = ({ isOpen, onClose, user, onSubmit, submitting })
     <ModalShell isOpen={isOpen} open={isOpen} onClose={onClose} title="Edit Profile" subtitle="Personnel editing workspace" icon={<Edit3 size={16} />} width={640}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
 
-        {/* Current information */}
+        {}
         <div>
           <div style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: '0.16em', textTransform: 'uppercase', color: T.sub, marginBottom: 10 }}>Current Information</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 14, borderRadius: 12, background: T.surface, border: `1px solid ${T.border}` }}>
@@ -652,7 +629,7 @@ const EditPersonnelWorkspace = ({ isOpen, onClose, user, onSubmit, submitting })
           <ChevronDown size={16} style={{ transform: 'rotate(0deg)' }} />
         </div>
 
-        {/* Editable information */}
+        {}
         <div>
           <div style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: '0.16em', textTransform: 'uppercase', color: T.sub, marginBottom: 10 }}>Editable Information</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -671,7 +648,7 @@ const EditPersonnelWorkspace = ({ isOpen, onClose, user, onSubmit, submitting })
           <ChevronDown size={16} />
         </div>
 
-        {/* Live preview */}
+        {}
         <div>
           <div style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: '0.16em', textTransform: 'uppercase', color: T.sub, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 7 }}>
             <Eye size={12} style={{ color: T.gold }} /> Live Preview
@@ -702,9 +679,6 @@ const EditPersonnelWorkspace = ({ isOpen, onClose, user, onSubmit, submitting })
   );
 };
 
-/* ────────────────────────────────────────────────────────────
-   VIEW PROFILE MODAL
-   ──────────────────────────────────────────────────────────── */
 const ViewProfileModal = ({ isOpen, onClose, user, onEditRequest }) => {
   if (!user) return null;
   const meta = roleMeta(user.role);
@@ -749,9 +723,6 @@ const ViewProfileModal = ({ isOpen, onClose, user, onEditRequest }) => {
   );
 };
 
-/* ────────────────────────────────────────────────────────────
-   DELETE (DANGER) DIALOG
-   ──────────────────────────────────────────────────────────── */
 const DeleteDialog = ({ isOpen, onClose, user, onConfirm, deleting }) => {
   if (!user) return null;
   const meta = roleMeta(user.role);
@@ -816,9 +787,6 @@ const DeleteDialog = ({ isOpen, onClose, user, onConfirm, deleting }) => {
   );
 };
 
-/* ────────────────────────────────────────────────────────────
-   MAIN COMPONENT
-   ──────────────────────────────────────────────────────────── */
 const UserManagement = () => {
   const [users,       setUsers]       = useState([]);
   const [loading,     setLoading]     = useState(true);
@@ -852,7 +820,7 @@ const UserManagement = () => {
     setLoading(false);
   };
 
-  /* export */
+  
   const handleExport = () => {
     if (!users.length) return toast('warning', 'No data to export');
     const headers = ['ID', 'First', 'Last', 'Email', 'Role', 'Registered'];
@@ -868,7 +836,7 @@ const UserManagement = () => {
     toast('success', 'CSV exported');
   };
 
-  /* add */
+ 
   const handleAdd = async (form) => {
     setSubmitting(true);
     try {
@@ -886,7 +854,7 @@ const UserManagement = () => {
     setSubmitting(false);
   };
 
-  /* edit */
+  
   const handleEdit = async (form) => {
     setSubmitting(true);
     const { error } = await supabase.from('profiles').update({
@@ -900,7 +868,7 @@ const UserManagement = () => {
     setSubmitting(false);
   };
 
-  /* delete */
+  
   const handleDeleteConfirm = async (user) => {
     setDeleting(true);
     const { error } = await supabase.from('profiles').delete().eq('id', user.id);
@@ -909,7 +877,7 @@ const UserManagement = () => {
     setDeleting(false);
   };
 
-  /* role cycle */
+  
   const handleRoleCycle = async (user) => {
     const cycle = ['customer', 'technician', 'manager', 'cashier'];
     const next  = cycle[(cycle.indexOf(user.role) + 1) % cycle.length];
@@ -982,7 +950,7 @@ const UserManagement = () => {
         @media (max-width: 860px) { .um-row-head { display: none; } }
       `}</style>
 
-      {/* ── Header ── */}
+      {}
       <div style={{
         position: 'relative', overflow: 'hidden', borderRadius: 18,
         background: `linear-gradient(135deg, ${T.ink} 0%, ${T.ink2} 100%)`, border: `1px solid ${T.border}`,
@@ -1021,12 +989,12 @@ const UserManagement = () => {
         </div>
       </div>
 
-      {/* ── Overview cards ── */}
+      {}
       <div className="um-overview" style={{ marginBottom: 20 }}>
         {overview.map((o, i) => <OverviewCard key={o.label} {...o} delay={i * 0.05} />)}
       </div>
 
-      {/* ── Search + role filter ── */}
+      {}
       <div style={{ display: 'flex', gap: 14, marginBottom: 20, flexWrap: 'wrap', alignItems: 'center' }}>
         <div style={{ position: 'relative', flex: '1 1 300px', minWidth: 220 }}>
           <Search size={15} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: T.sub }} />
@@ -1052,7 +1020,7 @@ const UserManagement = () => {
         <RoleSegmented value={filterRole} onChange={setFilterRole} counts={counts} total={users.length} />
       </div>
 
-      {/* ── Column headers ── */}
+      {}
       <div className="um-row-head">
         {[{ label: 'Personnel', field: 'first_name' }, { label: 'Role', field: 'role' }, { label: 'Email', field: 'email' }, { label: 'Registered', field: 'created_at' }].map(col => (
           <button key={col.field} className="um-th-btn" onClick={() => toggleSort(col.field)}>
@@ -1062,7 +1030,7 @@ const UserManagement = () => {
         <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: '0.14em', textTransform: 'uppercase', color: T.sub, textAlign: 'right' }}>Actions</span>
       </div>
 
-      {/* ── List ── */}
+      {}
       {loading ? (
         <div>
           {[1, 2, 3, 4, 5].map(i => (
@@ -1097,7 +1065,7 @@ const UserManagement = () => {
         </AnimatePresence>
       )}
 
-      {/* ── Footer summary ── */}
+      {}
       {!loading && filtered.length > 0 && (
         <div style={{ padding: '12px 18px', marginTop: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
           <span style={{ fontSize: 10, color: T.sub, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 700 }}>
@@ -1106,7 +1074,7 @@ const UserManagement = () => {
         </div>
       )}
 
-      {/* ── Modals ── */}
+      {}
       <AddPersonnelWizard isOpen={showAdd} onClose={() => setShowAdd(false)} onSubmit={handleAdd} submitting={submitting} />
       <EditPersonnelWorkspace isOpen={showEdit} onClose={() => setShowEdit(false)} user={activeUser} onSubmit={handleEdit} submitting={submitting} />
       <ViewProfileModal isOpen={showView} onClose={() => setShowView(false)} user={activeUser} onEditRequest={(u) => { setShowView(false); setActiveUser(u); setShowEdit(true); }} />

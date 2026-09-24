@@ -4,13 +4,6 @@ import {
   CheckCircle2, XCircle, AlertTriangle, Info, HelpCircle, Loader2, X,
 } from 'lucide-react';
 
-/* ═══════════════════════════════════════════════════════════
-   PREMIUM MESSAGE CENTER
-   Drop <MessageCenter {...mc} /> once near the root of a screen,
-   call the returned methods from useMessageCenter() anywhere in
-   that subtree instead of window.alert / confirm / SweetAlert2.
-═══════════════════════════════════════════════════════════ */
-
 const TYPE_STYLES = {
   success: { icon: CheckCircle2, ring: 'ring-emerald-500/30', iconBg: 'bg-emerald-500/15', iconText: 'text-emerald-400', bar: 'bg-emerald-400' },
   error:   { icon: XCircle,      ring: 'ring-red-500/30',     iconBg: 'bg-red-500/15',     iconText: 'text-red-400',     bar: 'bg-red-400'     },
@@ -23,7 +16,7 @@ const nextId = () => `msg_${++idCounter}_${Date.now()}`;
 
 export function useMessageCenter() {
   const [toasts, setToasts] = useState([]);
-  const [modal, setModal] = useState(null); // { type: 'confirm' | 'loading', ...}
+  const [modal, setModal] = useState(null); 
   const timers = useRef({});
 
   const dismiss = useCallback((id) => {
@@ -75,7 +68,7 @@ export function useMessageCenter() {
 }
 
 export const MessageCenter = ({ toasts = [], modal = null, dismiss, closeModal }) => {
-  /* ESC to close */
+  
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape' && modal) closeModal(false); };
     window.addEventListener('keydown', onKey);
@@ -84,7 +77,7 @@ export const MessageCenter = ({ toasts = [], modal = null, dismiss, closeModal }
 
   return (
     <>
-      {/* ── Toast stack ── */}
+      {}
       <div className="fixed top-4 right-4 z-[9999] flex flex-col gap-2.5 w-[calc(100%-2rem)] max-w-sm pointer-events-none">
         <AnimatePresence>
           {toasts.map((t) => {
@@ -119,7 +112,7 @@ export const MessageCenter = ({ toasts = [], modal = null, dismiss, closeModal }
         </AnimatePresence>
       </div>
 
-      {/* ── Modal (confirm / loading) ── */}
+      {}
       <AnimatePresence>
         {modal && (
           <motion.div

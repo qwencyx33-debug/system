@@ -18,18 +18,11 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '../../supabaseClient';
 import Swal from 'sweetalert2';
 
-/* ════════════════════════════════════════════════════════════
-   BRAND TOKENS — Dark Navy Glass + Gold, matches the rest of
-   the customer app (dashboard, history). No white containers.
-════════════════════════════════════════════════════════════ */
 const NAVY = '#071A3D';
 const CARD = '#0B2350';
 const GOLD = '#FFC107';
 const TEXT_LIGHT = '#F5F7FB';
 
-/* ════════════════════════════════════════════════════════════
-   ANIMATION VARIANTS
-════════════════════════════════════════════════════════════ */
 const pageVariants = {
   hidden: { opacity: 0 },
   visible: { opacity: 1, transition: { duration: 0.4, when: 'beforeChildren', staggerChildren: 0.07 } },
@@ -40,9 +33,6 @@ const itemVariants = {
   visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: [0.16, 1, 0.3, 1] } },
 };
 
-/* ════════════════════════════════════════════════════════════
-   ANIMATED COUNTER — used for the completion percentage.
-════════════════════════════════════════════════════════════ */
 function AnimatedCounter({ value, suffix = '' }) {
   const [display, setDisplay] = useState(0);
   useEffect(() => {
@@ -61,10 +51,6 @@ function AnimatedCounter({ value, suffix = '' }) {
   return <>{display}{suffix}</>;
 }
 
-/* ════════════════════════════════════════════════════════════
-   COMPLETION RING — circular progress around the hero avatar.
-   Driven entirely by real profile fields, nothing invented.
-════════════════════════════════════════════════════════════ */
 function CompletionRing({ percent, size = 128, stroke = 3.5 }) {
   const r = (size - stroke * 2) / 2;
   const c = 2 * Math.PI * r;
@@ -90,9 +76,6 @@ function CompletionRing({ percent, size = 128, stroke = 3.5 }) {
   );
 }
 
-/* ════════════════════════════════════════════════════════════
-   FLOATING-LABEL FIELD — dark glass input, yellow focus glow.
-════════════════════════════════════════════════════════════ */
 const FloatingField = ({
   icon: Icon,
   label,
@@ -161,10 +144,6 @@ const FloatingField = ({
   );
 };
 
-/* ════════════════════════════════════════════════════════════
-   SUMMARY WIDGET — compact dashboard tile, derived purely from
-   real profile fields (no invented status values).
-════════════════════════════════════════════════════════════ */
 const SummaryWidget = ({ icon: Icon, label, value, tone = 'default' }) => {
   const tones = {
     default: { bg: 'bg-white/[0.04]', border: 'border-white/10', iconBg: 'bg-white/[0.06]', iconColor: 'text-slate-300' },
@@ -189,9 +168,6 @@ const SummaryWidget = ({ icon: Icon, label, value, tone = 'default' }) => {
   );
 };
 
-/* ════════════════════════════════════════════════════════════
-   SUBSECTION DIVIDER — used inside the single merged panel.
-════════════════════════════════════════════════════════════ */
 const SubSection = ({ icon: Icon, title, subtitle, children, first = false }) => (
   <div className={`${first ? '' : 'border-t border-white/[0.06] pt-7 mt-7'}`}>
     <div className="flex items-center gap-2.5 mb-5">
@@ -207,16 +183,14 @@ const SubSection = ({ icon: Icon, title, subtitle, children, first = false }) =>
   </div>
 );
 
-/* ════════════════════════════════════════════════════════════
-   MAIN COMPONENT
-════════════════════════════════════════════════════════════ */
+
 const ProfileSettings = ({ profile, setProfile, onBack }) => {
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [justSaved, setJustSaved] = useState(false);
   const [avatarPulse, setAvatarPulse] = useState(false);
 
-  /* ---- Derived, real-data-only summary metrics (no fake fields) ---------- */
+  
   const { completeness, isVerified, hasContact, hasAvatar } = useMemo(() => {
     const fields = [profile.first_name, profile.last_name, profile.phone, profile.address, profile.avatar_url];
     const filled = fields.filter((f) => f && String(f).trim().length > 0).length;
@@ -230,7 +204,7 @@ const ProfileSettings = ({ profile, setProfile, onBack }) => {
 
   const initials = `${(profile.first_name || '?')[0] || ''}${(profile.last_name || '')[0] || ''}`.toUpperCase();
 
-  /* ---- Dark-themed toast notification (same trigger points) -------------- */
+  
   const notify = (title, text, icon) => {
     Swal.fire({
       title,
@@ -247,7 +221,6 @@ const ProfileSettings = ({ profile, setProfile, onBack }) => {
     });
   };
 
-  /* ---- AUTO-SAVE TO DATABASE LOGIC (unchanged Supabase logic) ------------ */
   const handleDatabaseUpdate = async (e) => {
     e.preventDefault();
     setSaving(true);
@@ -260,7 +233,7 @@ const ProfileSettings = ({ profile, setProfile, onBack }) => {
           last_name: profile.last_name,
           phone: profile.phone,
           address: profile.address,
-          // avatar_url is updated separately during upload
+          
         })
         .eq('email', profile.email);
 
@@ -276,7 +249,7 @@ const ProfileSettings = ({ profile, setProfile, onBack }) => {
     }
   };
 
-  /* ---- AVATAR UPLOAD LOGIC (unchanged Supabase logic) --------------------- */
+  
   const uploadAvatar = async (event) => {
     try {
       setUploading(true);
@@ -287,14 +260,14 @@ const ProfileSettings = ({ profile, setProfile, onBack }) => {
       const fileName = `${Math.random()}.${fileExt}`;
       const filePath = `avatars/${fileName}`;
 
-      // 1. Storage Upload
+      
       let { error: uploadError } = await supabase.storage.from('avatars').upload(filePath, file);
       if (uploadError) throw uploadError;
 
-      // 2. Get Public URL
+      
       const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(filePath);
 
-      // 3. Update Profile Table
+      
       const { error: updateError } = await supabase
         .from('profiles')
         .update({ avatar_url: publicUrl })
@@ -321,7 +294,7 @@ const ProfileSettings = ({ profile, setProfile, onBack }) => {
       className="max-w-4xl mx-auto pb-28 md:pb-12 min-h-screen"
       style={{ background: '#000000' }}
     >
-      {/* Back navigation */}
+      {}
       <motion.button
         variants={itemVariants}
         onClick={onBack}
@@ -330,13 +303,13 @@ const ProfileSettings = ({ profile, setProfile, onBack }) => {
         <ArrowLeft size={13} /> Back
       </motion.button>
 
-      {/* ═══════════════════════════ PROFILE HERO ═══════════════════════════ */}
+      {}
       <motion.div
         variants={itemVariants}
         className="relative mx-1 rounded-[32px] overflow-hidden border border-white/10"
         style={{ background: `linear-gradient(135deg, ${NAVY} 0%, ${CARD} 55%, #10285C 100%)` }}
       >
-        {/* animated gradient sheen */}
+        {}
         <motion.div
           className="absolute inset-0 opacity-40 pointer-events-none"
           style={{ background: `radial-gradient(600px circle at var(--x,30%) var(--y,20%), ${GOLD}22, transparent 60%)` }}
@@ -347,7 +320,7 @@ const ProfileSettings = ({ profile, setProfile, onBack }) => {
         <div className="absolute -bottom-16 -left-10 w-56 h-56 bg-amber-400/[0.06] rounded-full blur-3xl pointer-events-none" />
 
         <div className="relative px-6 sm:px-10 pt-10 pb-16 flex flex-col sm:flex-row items-center sm:items-end gap-6 text-center sm:text-left">
-          {/* Avatar with completion ring */}
+          {}
           <motion.div
             className="relative shrink-0"
             animate={{ y: [0, -6, 0] }}
@@ -427,7 +400,7 @@ const ProfileSettings = ({ profile, setProfile, onBack }) => {
         </div>
       </motion.div>
 
-      {/* ═══════════════════════════ SUMMARY WIDGETS ═══════════════════════════ */}
+      {}
       <div className="relative -mt-7 px-3 grid grid-cols-2 lg:grid-cols-4 gap-3 z-10">
         <SummaryWidget
           icon={Sparkles}
@@ -455,7 +428,7 @@ const ProfileSettings = ({ profile, setProfile, onBack }) => {
         />
       </div>
 
-      {/* ═══════════════════════════ MERGED SETTINGS PANEL ═══════════════════════════ */}
+      {}
       <form onSubmit={handleDatabaseUpdate} className="mt-6 px-1">
         <motion.div
           variants={itemVariants}
@@ -500,14 +473,14 @@ const ProfileSettings = ({ profile, setProfile, onBack }) => {
             </div>
           </SubSection>
 
-          {/* Desktop save button, inline inside the panel */}
+          {}
           <div className="hidden md:flex justify-end border-t border-white/[0.06] pt-7 mt-7">
             <SaveButton saving={saving} uploading={uploading} justSaved={justSaved} />
           </div>
         </motion.div>
       </form>
 
-      {/* Sticky mobile save bar */}
+      {}
       <div
         className="md:hidden fixed bottom-0 left-0 right-0 z-20 backdrop-blur-xl border-t border-white/10 px-4 py-3"
         style={{ background: 'rgba(7, 26, 61, 0.9)' }}
@@ -524,10 +497,6 @@ const ProfileSettings = ({ profile, setProfile, onBack }) => {
   );
 };
 
-/* ════════════════════════════════════════════════════════════
-   SAVE BUTTON — gold gradient, hover glow, ripple, loading,
-   morph into success state with animated checkmark.
-════════════════════════════════════════════════════════════ */
 const SaveButton = ({ saving, uploading, justSaved, full = false, onClick }) => {
   const [ripples, setRipples] = useState([]);
 

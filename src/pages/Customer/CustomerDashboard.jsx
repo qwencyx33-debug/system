@@ -4,34 +4,29 @@ import {
   ShieldCheck, PlusCircle, Clock, ChevronRight, Bell,
   Calendar, LayoutGrid, Settings, CreditCard, History, LogOut,
   ArrowLeft, CheckCircle2, X, Headphones, FileText,
-  ChevronDown, CheckCheck, Star,
+  ChevronDown, Check, CheckCheck,
   MapPin, Wallet, UserCheck, Wrench, Truck, Hammer,
   Image as ImageIcon, ChevronLeft, ChevronRight as ChevronRightIcon,
   LifeBuoy, HelpCircle, MessageCircle, PhoneCall, BookOpen,
-  ClipboardList, Timer, Flag, Activity, ExternalLink, Sparkles,
+  ClipboardList, Timer, Activity, ExternalLink, Sparkles,
+  Upload, Loader2,
 } from 'lucide-react';
+// eslint-disable-next-line no-unused-vars -- `motion.*` is used as a JSX namespace.
 import { motion, AnimatePresence } from 'framer-motion';
 
 import ProfileSettings from './ProfileSettings';
 import RequestService from './RequestService';
 import ServiceLogs from './ServiceLogs';
 
-
-/* ════════════════════════════════════════════════════════════
-   DESIGN TOKENS — Yellow + Navy only. Red is reserved for
-   errors / cancelled states. No other accent colors are used
-   anywhere in this file.
-   ════════════════════════════════════════════════════════════ */
 const NAVY = {
-  deep: '#040810',      // page background
-  dark: '#070d1a',      // sidebar / chrome
-  mid: '#0a1120',        // panels
-  soft: '#101a30',       // elevated panels / hovers
+  deep: '#040810',      
+  dark: '#070d1a',      
+  mid: '#0a1120',        
+  soft: '#101a30',       
   line: 'rgba(255,255,255,0.07)',
 };
-const GOLD = '#F2C230'; // single highlight color, used sparingly
 
-/* ─── helpers ───────────────────────────────────────────── */
+
 const getGreeting = () => {
   const h = new Date().getHours();
   if (h < 12) return 'Good Morning';
@@ -42,16 +37,54 @@ const getGreeting = () => {
 const isNegativeStatus = (status) => ['cancelled', 'rejected'].includes((status || '').toLowerCase());
 const isDoneStatus = (status) => (status || '').toLowerCase() === 'completed';
 
-/* Status pill — yellow for anything in motion, quiet neutral for
-   completed, red only for cancelled/rejected (errors). */
+
 const getStatusStyle = (status) => {
   const s = (status || '').toLowerCase();
   if (isNegativeStatus(s)) return 'border-red-500/30 text-red-400 bg-red-500/10';
-  if (isDoneStatus(s)) return 'border-white/15 text-slate-300 bg-white/[0.04]';
+  if (['approved', 'confirmed', 'completed'].includes(s)) return 'border-emerald-400/30 text-emerald-300 bg-emerald-400/10';
   return 'border-amber-400/30 text-amber-300 bg-amber-400/10';
 };
 
+const getStatusCopy = (status) => {
+  const value = (status || 'pending').toLowerCase();
+  if (value === 'pending') return { label: 'Pending review', description: 'Your request is being reviewed.' };
+  if (value === 'approved' || value === 'confirmed') return { label: 'Confirmed', description: 'Your appointment is confirmed. Please be ready at the scheduled time.' };
+  if (value === 'completed') return { label: 'Completed', description: 'Your service has been completed.' };
+  if (value === 'cancelled') return { label: 'Cancelled', description: 'This appointment was cancelled.' };
+  if (value === 'rejected') return { label: 'Needs attention', description: 'This appointment needs attention. Contact support if you need help.' };
+  return { label: status || 'In progress', description: 'Your service is currently in progress.' };
+};
+
 const peso = (n) => `₱${Number(n || 0).toLocaleString()}`;
+const getBalanceDue = (appointment) => {
+  const total = Number(appointment?.price || 0);
+  const paymentStatus = (appointment?.payment_status || '').toLowerCase();
+  const paid = ['paid', 'full_paid'].includes(paymentStatus)
+    ? total
+    : Number(appointment?.downpayment_paid ?? 0);
+  return Math.max(total - paid, 0);
+};
+const isAwaitingCashierVerification = (appointment) => (appointment?.payment_status || '').toLowerCase() === 'awaiting_cashier_verification';
+const isPaymentRejected = (appointment) => ['payment_rejected', 'rejected'].includes((appointment?.payment_status || '').toLowerCase());
+const canSubmitFinalPayment = (appointment) => {
+  const status = (appointment?.status || '').toLowerCase();
+  const paymentStatus = (appointment?.payment_status || '').toLowerCase();
+  return ['completed', 'awaiting_final_payment'].includes(status)
+    && getBalanceDue(appointment) > 0
+    && !['paid', 'full_paid', 'awaiting_cashier_verification'].includes(paymentStatus);
+};
+const getNextAction = (appointment) => {
+  const status = (appointment?.status || 'pending').toLowerCase();
+  if (isAwaitingCashierVerification(appointment)) return 'Your final payment proof is waiting for cashier verification.';
+  if (isPaymentRejected(appointment)) return 'Your final payment needs attention. Please review and submit it again.';
+  if (canSubmitFinalPayment(appointment)) return 'Service completed. Your remaining balance is ready for GCash payment.';
+  if (isNegativeStatus(status)) return 'This appointment needs attention. Contact support if you need help.';
+  if (status === 'completed') return 'Your service has been completed.';
+  if (status === 'approved') return 'Your request is approved. We will confirm technician availability shortly.';
+  if (appointment?.technician_id || appointment?.assigned_at) return 'Your technician has been assigned. Please be ready at the scheduled time.';
+  if (getBalanceDue(appointment) > 0 && !appointment?.receipt_image) return 'Complete your required payment to help us confirm your booking.';
+  return 'Your request is being reviewed. We will notify you once it is confirmed.';
+};
 
 const navItems = [
   { id: 'dashboard', label: 'Overview', icon: LayoutGrid },
@@ -70,32 +103,16 @@ const STAGES = [
   { key: 'done', label: 'Completed', icon: CheckCheck },
 ];
 
-/* Real-status → stage index. Completed ALWAYS resolves to the
-   final stage regardless of any stale started_at/assigned_at
-   flags — this is what fixes the "stuck at 67%" bug: status is
-   the single source of truth, not intermediate timestamps. */
 function deriveStageIndex(appt) {
   const status = (appt.status || '').toLowerCase();
   if (isNegativeStatus(status)) return -1;
-  if (status === 'completed') return 6; // always full — never "Work In Progress" again
+  if (status === 'completed') return 6; 
   if (status === 'quality inspection' || status === 'qc' || appt.qc_status === 'in_review') return 5;
   if (status === 'work in progress' || appt.started_at) return 4;
   if (status === 'technician on the way' || status === 'en route' || status === 'enroute') return 3;
   if (appt.assigned_at || appt.technician_id) return 2;
   if (status === 'approved') return 1;
   return 0;
-}
-
-/* Progress percentage derived directly from status, per spec:
-   Pending 0 · Approved 15 · Assigned 30 · On The Way 45 ·
-   Work In Progress 65 · Quality Inspection 85 · Completed 100 */
-function deriveProgressPercent(appt) {
-  const status = (appt.status || '').toLowerCase();
-  if (isNegativeStatus(status)) return 0;
-  if (status === 'completed') return 100;
-  const stageIndex = deriveStageIndex(appt);
-  const map = [0, 15, 30, 45, 65, 85, 100];
-  return map[Math.max(stageIndex, 0)] ?? 0;
 }
 
 const fmtTime = (iso) => {
@@ -110,7 +127,7 @@ const fmtDate = (val) => {
   catch { return val; }
 };
 
-/* ── Assigned Technician card — hangs off the "assigned" node ── */
+
 const TechnicianCard = ({ technician, appointment }) => {
   if (!technician) return null;
   const initials = `${technician.first_name?.[0] || ''}${technician.last_name?.[0] || ''}`.toUpperCase() || 'T';
@@ -146,7 +163,7 @@ const TechnicianCard = ({ technician, appointment }) => {
   );
 };
 
-/* ── Manager Update card — hangs off "approved" node ─────────── */
+
 const ManagerNoteCard = ({ note }) => {
   if (!note) return null;
   return (
@@ -166,7 +183,6 @@ const ManagerNoteCard = ({ note }) => {
   );
 };
 
-/* ── Quality Inspection — certificate-style card, "qc" node ──── */
 const QCCard = ({ qc }) => {
   if (!qc) return null;
   return (
@@ -202,7 +218,6 @@ const QCCard = ({ qc }) => {
   );
 };
 
-/* ── Job Photos gallery — grouped Before/During/After, hangs off "working"/"done" ── */
 const PhotoStrip = ({ photos, onOpen }) => {
   if (!photos?.length) return null;
   const groups = ['before', 'during', 'after'];
@@ -251,7 +266,7 @@ const PhotoStrip = ({ photos, onOpen }) => {
   );
 };
 
-/* ── Fullscreen photo lightbox — with swipe support ─────────── */
+
 const PhotoLightbox = ({ photos, index, onClose, onIndexChange }) => {
   const touchStartX = useRef(null);
 
@@ -329,13 +344,6 @@ const PhotoLightbox = ({ photos, index, onClose, onIndexChange }) => {
   );
 };
 
-/* ═════════════════════════════════════════════════════════════
-   StatusSpine — one vertical line; each stage hangs its real
-   data off the node it belongs to, instead of scattering it
-   into separate floating cards. Progress is always derived from
-   the live `status` field, so a completed job can never render
-   as "Work In Progress" again.
-   ═════════════════════════════════════════════════════════════ */
 const StatusSpine = ({ appointment, technician, managerNotes = [], qcReport, photos = [] }) => {
   const [lightboxIndex, setLightboxIndex] = useState(null);
   const [expanded, setExpanded] = useState(true);
@@ -445,13 +453,6 @@ const StatusSpine = ({ appointment, technician, managerNotes = [], qcReport, pho
   );
 };
 
-/* ════════════════════════════════════════════════════════════
-   SERVICE REPORT — appears only once a service_reports row
-   exists for the appointment. Fields map 1:1 to the real
-   service_reports columns (service_performed, items_used,
-   completion_time, technician_name, technician_notes) so
-   nothing invented ever shows up.
-   ════════════════════════════════════════════════════════════ */
 const ServiceReportCard = ({ report }) => {
   if (!report) return null;
   const rows = [
@@ -496,17 +497,12 @@ const ServiceReportCard = ({ report }) => {
   );
 };
 
-/* ════════════════════════════════════════════════════════════
-   PAYMENT SUMMARY — small, clean, no oversized widgets.
-   Derived only from appointments.price / downpayment_paid /
-   payment_status, all already present in the schema.
-   ════════════════════════════════════════════════════════════ */
-const PaymentSummaryCard = ({ appointment }) => {
+const PaymentSummaryCard = ({ appointment, onPayRemaining }) => {
   if (!appointment) return null;
   const total = Number(appointment.price || 0);
   const status = (appointment.payment_status || 'pending').toLowerCase();
-  const downpayment = Number(appointment.downpayment_paid || 0);
-  const paid = status === 'paid' ? total : downpayment;
+  const downpayment = Number(appointment.downpayment_paid ?? 0);
+  const paid = ['paid', 'full_paid'].includes(status) ? total : downpayment;
   const remaining = Math.max(total - paid, 0);
 
   return (
@@ -541,16 +537,22 @@ const PaymentSummaryCard = ({ appointment }) => {
           >{peso(remaining)}</motion.span>
         </div>
       </div>
-      <div className={`mt-4 inline-flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-wider px-2.5 py-1.5 rounded-full border ${getStatusStyle(status === 'paid' ? 'completed' : 'pending')}`}>
+      <div className={`mt-4 inline-flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-wider px-2.5 py-1.5 rounded-full border ${getStatusStyle(['paid', 'full_paid'].includes(status) ? 'completed' : 'pending')}`}>
         {status} · {appointment.payment_method || 'COD'}
       </div>
+      {canSubmitFinalPayment(appointment) && onPayRemaining && (
+        <button type="button" onClick={() => onPayRemaining(appointment)} className="mt-4 w-full rounded-xl bg-amber-400 px-4 py-3 text-xs font-black uppercase tracking-wide text-[#140f02] hover:bg-amber-300 transition-colors">{isPaymentRejected(appointment) ? 'Resubmit payment' : 'Pay remaining balance'}</button>
+      )}
+      {isAwaitingCashierVerification(appointment) && (
+        <p className="mt-4 rounded-xl border border-amber-400/20 bg-amber-400/[0.06] px-3 py-2.5 text-xs font-semibold leading-relaxed text-amber-200">Payment submitted successfully. It is waiting for cashier verification.</p>
+      )}
+      {isPaymentRejected(appointment) && (
+        <p className="mt-4 rounded-xl border border-amber-400/20 bg-amber-400/[0.06] px-3 py-2.5 text-xs font-semibold leading-relaxed text-amber-200">Your payment submission needs attention. Please review and submit your GCash proof again.</p>
+      )}
     </div>
   );
 };
 
-/* ════════════════════════════════════════════════════════════
-   FLOATING HELP BUTTON
-   ════════════════════════════════════════════════════════════ */
 const HELP_ITEMS = [
   { icon: BookOpen, label: 'Help Center', action: 'help' },
   { icon: HelpCircle, label: 'FAQs', action: 'faq' },
@@ -611,7 +613,7 @@ const FloatingHelp = ({ onAction }) => {
   );
 };
 
-/* ─── Skeleton (loading state) ──────────────────────────────── */
+
 const Skeleton = ({ className = '' }) => (
   <div
     className={`animate-pulse bg-gradient-to-r from-white/5 via-white/10 to-white/5 rounded-2xl ${className}`}
@@ -619,7 +621,6 @@ const Skeleton = ({ className = '' }) => (
   />
 );
 
-/* ─── Notification Panel — premium centered dropdown ────────── */
 const NotificationPanel = ({ onClose, appointments }) => {
   const pending = appointments.filter(a => ['pending', 'approved'].includes((a.status || '').toLowerCase())).slice(0, 5);
 
@@ -675,44 +676,183 @@ const NotificationPanel = ({ onClose, appointments }) => {
   );
 };
 
-/* ─── Hero progress ring — yellow only, gold glow + stops
-   pulsing once the job is actually complete ─────────────────── */
-const ProgressRing = ({ percent = 0, completed = false }) => {
-  const r = 38;
-  const c = 2 * Math.PI * r;
+const CurrentAppointmentCard = ({ appointment, onView }) => {
+  if (!appointment) return null;
+  const status = getStatusCopy(appointment.status);
+  const balance = getBalanceDue(appointment);
+  const location = appointment.appointment_address || appointment.address || 'Location to be confirmed';
+  const details = [
+    { icon: Calendar, label: 'Appointment date', value: fmtDate(appointment.schedule_date) || 'To be scheduled' },
+    { icon: Clock, label: 'Appointment time', value: appointment.appointment_time || 'To be confirmed' },
+    { icon: MapPin, label: 'Service location', value: location, wide: true },
+    { icon: Wallet, label: 'Balance due', value: peso(balance), highlight: true },
+  ];
+
   return (
-    <div className="relative w-24 h-24 flex-shrink-0">
-      {completed && (
-        <motion.div
-          className="absolute -inset-2 rounded-full bg-amber-400/25 blur-xl"
-          animate={{ opacity: [0.4, 0.75, 0.4] }}
-          transition={{ duration: 2.6, repeat: Infinity, ease: 'easeInOut' }}
-        />
-      )}
-      <svg viewBox="0 0 96 96" className="relative w-full h-full -rotate-90">
-        <circle cx="48" cy="48" r={r} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="8" />
-        <motion.circle
-          cx="48" cy="48" r={r} fill="none" stroke={GOLD} strokeWidth="8" strokeLinecap="round"
-          strokeDasharray={c}
-          initial={{ strokeDashoffset: c }}
-          animate={{ strokeDashoffset: c - (percent / 100) * c }}
-          transition={{ duration: 1.2, ease: [0.23, 1, 0.32, 1] }}
-        />
-      </svg>
-      <div className="absolute inset-0 flex flex-col items-center justify-center">
-        {completed ? (
-          <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', bounce: 0.55, delay: 0.3 }}>
-            <CheckCircle2 size={26} className="text-amber-300" />
-          </motion.div>
-        ) : (
-          <span className="text-xl font-black text-white tabular-nums">{percent}%</span>
+    <motion.section
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.28 }}
+      className="relative overflow-hidden rounded-2xl border border-white/10 bg-[#080e1c]/95 shadow-[0_18px_50px_rgba(0,0,0,0.22)]"
+    >
+      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-amber-300/60 to-transparent" />
+      <div className="relative p-5 md:p-6">
+        <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
+          <div className="min-w-0">
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">Your appointment</p>
+            <div className="mt-2 flex flex-wrap items-center gap-2.5">
+              <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-bold ${getStatusStyle(appointment.status)}`}>
+                <span className="h-1.5 w-1.5 rounded-full bg-current" /> {status.label}
+              </span>
+              {appointment.reference_number && <span className="text-xs text-slate-500">Ref. {appointment.reference_number}</span>}
+            </div>
+            <h2 className="mt-4 text-2xl font-bold tracking-tight text-white md:text-3xl">{appointment.service_type || 'Service request'}</h2>
+            <p className="mt-1.5 max-w-2xl text-sm leading-6 text-slate-400">{getNextAction(appointment)}</p>
+          </div>
+          <motion.button
+            whileTap={{ scale: 0.98 }}
+            onClick={onView}
+            className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-amber-400 px-4 py-3 text-sm font-bold text-[#140f02] transition-colors hover:bg-amber-300"
+          >
+            View appointment <ChevronRight size={16} />
+          </motion.button>
+        </div>
+
+        <div className="mt-5 grid grid-cols-1 gap-px overflow-hidden rounded-xl border border-white/[0.07] bg-white/[0.07] sm:grid-cols-2 xl:grid-cols-4">
+          {details.map(({ icon: Icon, label, value, wide, highlight }) => (
+            <div key={label} className={`min-w-0 bg-[#0a1120] px-4 py-3.5 ${wide ? 'sm:col-span-2 xl:col-span-1' : ''}`}>
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-500"><Icon size={13} className="text-amber-400" /> {label}</div>
+              <p className={`mt-2 truncate text-sm font-semibold ${highlight ? 'text-amber-300' : 'text-white'}`} title={value}>{value}</p>
+            </div>
+          ))}
+        </div>
+        {appointment.payment_status && (
+          <p className="mt-3 text-xs text-slate-500">Payment: <span className="font-semibold capitalize text-slate-300">{appointment.payment_status.replace('_', ' ')}</span>{appointment.payment_method ? ` · ${appointment.payment_method}` : ''}</p>
         )}
       </div>
-    </div>
+    </motion.section>
   );
 };
 
-/* ─── Compact service history row ────────────────────────────── */
+const FinalPaymentModal = ({ appointment, onClose, onSubmitted, onError }) => {
+  const [step, setStep] = useState(1);
+  const [reference, setReference] = useState('');
+  const [receiptUrl, setReceiptUrl] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+  const balance = getBalanceDue(appointment);
+
+  const showError = (message) => {
+    setError(message);
+    onError?.(message);
+  };
+
+  const getSubmissionErrorMessage = (submissionError) => {
+    const message = (submissionError?.message || '').toLowerCase();
+    if (message.includes('row-level security') || message.includes('permission denied')) return 'You are not authorized to update this appointment.';
+    if (message.includes('already waiting') || message.includes('awaiting_cashier_verification')) return 'This payment is already waiting for cashier verification.';
+    if (message.includes('fully paid') || message.includes('no longer requires')) return 'This appointment has already been fully paid.';
+    return 'Unable to submit payment. Please try again.';
+  };
+
+  const uploadReceipt = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setError('');
+    setUploading(true);
+    try {
+      const extension = file.name.split('.').pop();
+      const path = `final-payments/${appointment.id}-${Date.now()}.${extension}`;
+      const { data: uploadData, error: uploadError } = await supabase.storage.from('assets').upload(path, file);
+      if (uploadError) {
+        console.error('Receipt upload error:', uploadError);
+        throw uploadError;
+      }
+      if (!uploadData?.path) throw new Error('Receipt upload did not return a file path.');
+      const { data: publicUrlData } = supabase.storage.from('assets').getPublicUrl(uploadData.path);
+      if (!publicUrlData?.publicUrl) throw new Error('Unable to create a receipt URL.');
+      setReceiptUrl(publicUrlData.publicUrl);
+    } catch (uploadError) {
+      console.error('Receipt upload error:', uploadError);
+      showError('Unable to upload the payment receipt. Please try again.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const submitPayment = async () => {
+    if (!reference.trim() || !receiptUrl) {
+      showError('Enter your GCash reference number and attach the payment screenshot.');
+      return;
+    }
+    setSubmitting(true);
+    setError('');
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Please sign in again before submitting your payment.');
+      const { data: latest, error: latestError } = await supabase
+        .from('appointments')
+        .select('id, status, payment_status, price, downpayment_paid')
+        .eq('id', appointment.id)
+        .eq('user_id', user.id)
+        .maybeSingle();
+      if (latestError) {
+        console.error('FINAL PAYMENT SUBMISSION ERROR:', latestError);
+        throw latestError;
+      }
+      if (!latest || !canSubmitFinalPayment(latest)) throw new Error('This appointment no longer requires a final payment. Please refresh the dashboard.');
+      // Customers submit proof only. They never set a payment to paid or complete an appointment.
+      const { data, error: updateError } = await supabase
+        .from('appointments')
+        .update({
+          payment_status: 'awaiting_cashier_verification',
+          payment_method: 'GCash',
+          payment_ref: reference.trim(),
+          receipt_image: receiptUrl,
+        })
+        .eq('id', appointment.id)
+        .eq('user_id', user.id)
+        .in('status', ['awaiting_final_payment', 'completed'])
+        .neq('payment_status', 'awaiting_cashier_verification')
+        .select('id')
+        .maybeSingle();
+      console.error('Payment update response:', { data, error: updateError });
+      if (updateError) {
+        console.error('Appointment payment update error:', updateError);
+        throw updateError;
+      }
+      if (!data) throw new Error('This appointment is no longer available for final-payment submission. Please refresh and try again.');
+      onSubmitted();
+    } catch (submitError) {
+      console.error('FINAL PAYMENT SUBMISSION ERROR:', submitError);
+      const message = submitError.message || '';
+      showError(message.includes('no longer') || message.includes('sign in')
+        ? message
+        : getSubmissionErrorMessage(submitError));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <AnimatePresence>
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} className="fixed inset-0 z-[110] flex items-center justify-center bg-black/75 p-4 backdrop-blur-md">
+        <motion.div initial={{ opacity: 0, y: 18, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 12, scale: 0.97 }} onClick={(event) => event.stopPropagation()} className="w-full max-w-4xl max-h-[92vh] overflow-y-auto rounded-[1.75rem] border border-amber-400/25 bg-[#080e1c] shadow-[0_32px_90px_rgba(0,0,0,0.6)]">
+          <div className="flex items-start justify-between border-b border-white/[0.07] p-5 md:p-6">
+            <div><p className="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-300">Final Payment Required</p><h2 className="mt-1 text-xl font-black text-white">Pay remaining balance</h2></div>
+            <button type="button" onClick={onClose} className="rounded-xl bg-white/[0.05] p-2 text-slate-400 hover:bg-white/[0.1] hover:text-white"><X size={16} /></button>
+          </div>
+          <div className="p-5 md:p-6">
+            <div className="mb-6 flex items-center gap-2"><span className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-black ${step === 1 ? 'bg-amber-400 text-[#140f02]' : 'bg-emerald-400 text-[#140f02]'}`}>{step > 1 ? <Check size={13} /> : '1'}</span><span className="text-xs font-bold text-slate-300">Payment summary</span><div className="h-px flex-1 bg-white/10" /><span className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-black ${step === 2 ? 'bg-amber-400 text-[#140f02]' : 'bg-white/10 text-slate-500'}`}>2</span><span className="text-xs font-bold text-slate-500">GCash proof</span></div>
+            {step === 1 ? <div className="space-y-4"><div className="rounded-2xl border border-white/[0.07] bg-white/[0.03] p-4"><p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Service</p><p className="mt-1 text-base font-bold text-white">{appointment.service_type || 'Service appointment'}</p><p className="mt-1 text-xs text-slate-500">Reference: {appointment.reference_number || appointment.id}</p></div><div className="space-y-3 rounded-2xl border border-white/[0.07] bg-black/15 p-4"><div className="flex justify-between text-sm text-slate-400"><span>Total service cost</span><strong className="text-white">{peso(appointment.price)}</strong></div><div className="flex justify-between text-sm text-slate-400"><span>Downpayment paid</span><strong className="text-emerald-300">{peso(appointment.downpayment_paid)}</strong></div><div className="border-t border-white/[0.08] pt-3"><div className="flex items-end justify-between"><span className="text-xs font-bold uppercase tracking-wider text-amber-300">Amount to pay</span><strong className="text-2xl font-black text-amber-300">{peso(balance)}</strong></div></div></div><button type="button" onClick={() => setStep(2)} className="w-full rounded-2xl bg-amber-400 py-3.5 text-sm font-black text-[#140f02] hover:bg-amber-300">Next <ChevronRight className="inline" size={16} /></button></div> : <div className="space-y-5"><div className="rounded-2xl border border-amber-400/20 bg-amber-400/[0.06] p-4"><p className="text-xs font-semibold text-slate-300">Send the exact balance to the configured Riontech GCash account, then provide the transaction proof below.</p><p className="mt-3 text-[10px] font-bold uppercase tracking-widest text-amber-300">Exact amount</p><p className="text-2xl font-black text-amber-300">{peso(balance)}</p></div><label className="block"><span className="text-sm font-semibold text-slate-300">GCash reference number</span><input value={reference} onChange={(event) => setReference(event.target.value)} className="mt-2 w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none focus:border-amber-400/60" placeholder="Enter transaction reference" /></label><label className="block"><span className="text-sm font-semibold text-slate-300">Payment amount</span><input value={peso(balance)} readOnly className="mt-2 w-full rounded-xl border border-white/10 bg-white/[0.025] px-4 py-3 text-sm font-bold text-amber-300 outline-none" /></label><div><p className="text-sm font-semibold text-slate-300">Payment screenshot</p>{receiptUrl ? <div className="mt-2 overflow-hidden rounded-xl border border-emerald-400/25"><img src={receiptUrl} alt="Submitted GCash payment" className="h-40 w-full object-contain bg-black/30" /><button type="button" onClick={() => setReceiptUrl('')} className="w-full border-t border-white/10 py-2 text-xs font-bold text-slate-300 hover:bg-white/[0.05]">Replace screenshot</button></div> : <label className="mt-2 flex cursor-pointer flex-col items-center rounded-xl border-2 border-dashed border-white/15 p-5 text-center hover:border-amber-400/40"><input type="file" accept="image/*" onChange={uploadReceipt} className="hidden" /><>{uploading ? <Loader2 className="animate-spin text-amber-300" size={20} /> : <Upload className="text-amber-300" size={20} />}<span className="mt-2 text-xs font-semibold text-slate-400">{uploading ? 'Uploading screenshot…' : 'Upload GCash screenshot'}</span></></label>}</div>{error && <p className="rounded-xl border border-red-400/20 bg-red-400/10 p-3 text-xs text-red-300">{error}</p>}<div className="flex gap-3"><button type="button" onClick={() => setStep(1)} disabled={submitting} className="flex-1 rounded-xl border border-white/10 py-3 text-sm font-bold text-slate-300">Back</button><button type="button" onClick={submitPayment} disabled={submitting || uploading} className="flex-[1.6] rounded-xl bg-amber-400 py-3 text-sm font-black text-[#140f02] disabled:opacity-50">{submitting ? 'Submitting…' : 'Submit payment'}</button></div><p className="text-center text-[11px] leading-relaxed text-slate-500">Your payment will wait for cashier verification. It is not marked as paid until a cashier approves it.</p></div>}
+          </div>
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>
+  );
+};
+
 const ServiceRow = ({ item, onClick, index = 0 }) => (
   <motion.div
     initial={{ opacity: 0, y: 8 }}
@@ -748,8 +888,6 @@ const ServiceRow = ({ item, onClick, index = 0 }) => (
   </motion.div>
 );
 
-/* ── Recent Service History — compact premium list on the
-   dashboard overview, hidden entirely when there's nothing yet ── */
 const RecentServiceHistory = ({ items, onOpen }) => {
   if (!items?.length) return null;
   return (
@@ -773,7 +911,6 @@ const RecentServiceHistory = ({ items, onOpen }) => {
   );
 };
 
-/* ─── Mobile Bottom Nav ─────────────────────────────────── */
 const MobileNav = ({ view, setView }) => (
   <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#050a15]/97 backdrop-blur-3xl border-t border-white/[0.06] px-2 pb-safe">
     <div className="flex items-center justify-around py-1.5">
@@ -800,103 +937,6 @@ const MobileNav = ({ view, setView }) => (
     </div>
   </nav>
 );
-
-/* ════════════════════════════════════════════════════════════
-   CENTERED MODALS — feedback + notices.
-   Replaces every window.alert() / browser confirm() dialog.
-   ════════════════════════════════════════════════════════════ */
-const FeedbackModal = ({ open, onClose, onSubmit, serviceName }) => {
-  const [rating, setRating] = useState(0);
-  const [hovered, setHovered] = useState(0);
-  const [comment, setComment] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [open, onClose]);
-
-  const handleSubmit = async () => {
-    if (!rating) return;
-    setSubmitting(true);
-    await onSubmit({ rating, comment });
-    setSubmitting(false);
-  };
-
-  return (
-    <AnimatePresence>
-      {open && (
-        <motion.div
-          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-          className="fixed inset-0 z-[90] flex items-center justify-center p-4 bg-black/70 backdrop-blur-md"
-        >
-          <motion.div
-            initial={{ opacity: 0, scale: 0.92, y: 12 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.94, y: 8 }}
-            transition={{ duration: 0.25, ease: [0.23, 1, 0.32, 1] }}
-            className="relative w-full max-w-sm bg-[#0a1322] border border-white/10 rounded-[1.75rem] p-7 shadow-[0_40px_100px_rgba(0,0,0,0.65)]"
-          >
-            <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 w-40 h-40 bg-amber-400/15 rounded-full blur-3xl pointer-events-none" />
-
-            <button
-              onClick={onClose}
-              className="absolute top-4 right-4 w-7 h-7 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center text-slate-400 hover:text-white transition-colors"
-            >
-              <X size={13} />
-            </button>
-
-            <div className="relative z-10 text-center">
-              <div className="w-12 h-12 rounded-full bg-amber-400/15 border border-amber-400/25 flex items-center justify-center mx-auto mb-4">
-                <CheckCircle2 size={22} className="text-amber-300" />
-              </div>
-              <h3 className="text-lg font-bold text-white mb-1">Rate Your Experience</h3>
-              <p className="text-xs text-slate-500 mb-6">{serviceName || 'Your service'} is complete</p>
-
-              <div className="flex items-center justify-center gap-1.5 mb-6">
-                {[1, 2, 3, 4, 5].map((n) => (
-                  <motion.button
-                    key={n}
-                    whileTap={{ scale: 0.85 }}
-                    onMouseEnter={() => setHovered(n)}
-                    onMouseLeave={() => setHovered(0)}
-                    onClick={() => setRating(n)}
-                  >
-                    <Star
-                      size={30}
-                      className={`transition-colors ${
-                        n <= (hovered || rating) ? 'text-amber-400 fill-amber-400' : 'text-slate-700'
-                      }`}
-                    />
-                  </motion.button>
-                ))}
-              </div>
-
-              <textarea
-                value={comment}
-                onChange={(e) => setComment(e.target.value)}
-                placeholder="Tell us about your experience (optional)"
-                rows={3}
-                className="w-full bg-white/[0.04] border border-white/10 rounded-2xl p-3.5 text-sm text-slate-200 placeholder:text-slate-600 outline-none focus:border-amber-400/40 focus:ring-2 ring-amber-400/15 resize-none transition-all"
-              />
-
-              <motion.button
-                whileTap={{ scale: 0.97 }}
-                disabled={!rating || submitting}
-                onClick={handleSubmit}
-                className="w-full mt-5 py-3 rounded-xl font-bold text-sm transition-all bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-[#140f02] shadow-lg shadow-amber-500/25 disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                {submitting ? 'Submitting…' : 'Submit Feedback'}
-              </motion.button>
-            </div>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
-  );
-};
 
 const NoticeModal = ({ open, onClose, title, message, tone = 'success' }) => {
   useEffect(() => {
@@ -952,10 +992,6 @@ const NoticeModal = ({ open, onClose, title, message, tone = 'success' }) => {
   );
 };
 
-/* ════════════════════════════════════════════════════════════
-   LOGOUT MODAL — confirm → loading → success, all animated,
-   zero browser alert()/confirm() calls.
-   ════════════════════════════════════════════════════════════ */
 const LogoutModal = ({ open, phase, onCancel, onConfirm }) => {
   useEffect(() => {
     if (!open || phase !== 'confirm') return;
@@ -1037,9 +1073,8 @@ const LogoutModal = ({ open, phase, onCancel, onConfirm }) => {
   );
 };
 
-/* ── Empty active-service state (no bookings at all yet) ─────── */
 const NoActiveService = ({ onBook }) => (
-  <div className="relative bg-[#080e1c]/80 backdrop-blur-xl border border-white/[0.08] rounded-[2rem] p-8 md:p-12 text-center overflow-hidden">
+  <div className="relative bg-[#080e1c]/80 backdrop-blur-xl border border-white/[0.08] rounded-2xl p-7 md:p-8 text-center overflow-hidden">
     <div className="absolute top-0 right-0 w-64 h-64 bg-amber-400/[0.05] rounded-full blur-3xl pointer-events-none" />
     <motion.div
       initial={{ opacity: 0, scale: 0.85 }}
@@ -1049,9 +1084,9 @@ const NoActiveService = ({ onBook }) => (
     >
       <ClipboardList size={26} className="text-amber-400" />
     </motion.div>
-    <h3 className="relative z-10 text-xl font-bold text-white mb-2">No Active Service</h3>
+    <h3 className="relative z-10 text-xl font-bold text-white mb-2">No upcoming appointment</h3>
     <p className="relative z-10 text-sm text-slate-500 max-w-sm mx-auto mb-7 leading-relaxed">
-      You don't have a service in progress right now. Book one whenever you're ready — we'll track it live, right here.
+      Ready to get started? Browse our services and request an appointment when you’re ready.
     </p>
     <motion.button
       whileHover={{ scale: 1.03 }}
@@ -1060,18 +1095,12 @@ const NoActiveService = ({ onBook }) => (
       className="relative z-10 inline-flex items-center gap-2.5 px-6 py-3.5 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-[#140f02] rounded-xl font-bold text-sm shadow-lg shadow-amber-500/25 transition-all"
     >
       <PlusCircle size={16} />
-      Book a Service
+      Browse Services
     </motion.button>
   </div>
 );
 
-/* ════════════════════════════════════════════════════════════
-   AFTER-COMPLETION EXPERIENCE — replaces "No Active Service"
-   once the customer has at least one completed appointment and
-   nothing currently active. Every field maps to a real column
-   on appointments / service_reports; nothing is invented.
-   ════════════════════════════════════════════════════════════ */
-const CompletedExperience = ({ lastCompleted, technician, report, onViewReport, onBook }) => {
+const CompletedExperience = ({ lastCompleted, technician, report, onViewReport, onBook, onPayRemaining }) => {
   if (!lastCompleted) return null;
   return (
     <motion.div
@@ -1130,6 +1159,10 @@ const CompletedExperience = ({ lastCompleted, technician, report, onViewReport, 
           )}
         </div>
 
+        <div className="mx-auto mb-8 max-w-xl text-left">
+          <PaymentSummaryCard appointment={lastCompleted} onPayRemaining={onPayRemaining} />
+        </div>
+
         <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
           {report && (
             <motion.button
@@ -1153,34 +1186,29 @@ const CompletedExperience = ({ lastCompleted, technician, report, onViewReport, 
   );
 };
 
-/* ══════════════════════════════════════════════════════════ */
-/*  MAIN COMPONENT                                            */
-/* ══════════════════════════════════════════════════════════ */
 const CustomerDashboard = ({ userEmail }) => {
   const [view, setView] = useState('dashboard');
   const [selectedAppointment, setSelectedAppointment] = useState(null);
   const [myAppointments, setMyAppointments] = useState([]);
-  const [technicians, setTechnicians] = useState({});       // id -> profile
-  const [managerNotes, setManagerNotes] = useState({});      // appointment_id -> [notes]
-  const [qcReports, setQcReports] = useState({});            // appointment_id -> report
-  const [jobPhotos, setJobPhotos] = useState({});            // appointment_id -> [photos]
-  const [serviceReports, setServiceReports] = useState({});  // appointment_id -> report
+  const [technicians, setTechnicians] = useState({});       
+  const [managerNotes, setManagerNotes] = useState({});      
+  const [qcReports, setQcReports] = useState({});            
+  const [jobPhotos, setJobPhotos] = useState({});            
+  const [serviceReports, setServiceReports] = useState({});  
   const [loading, setLoading] = useState(true);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [finalPaymentAppointment, setFinalPaymentAppointment] = useState(null);
   const [profile, setProfile] = useState({
     first_name: 'User', last_name: '', email: userEmail, phone: '', address: '', avatar_url: null,
   });
 
-  const [feedbackOpen, setFeedbackOpen] = useState(false);
-  const [feedbackTarget, setFeedbackTarget] = useState(null);
-  const [notice, setNotice] = useState(null); // { title, message, tone }
-  const seenCompletedRef = useRef(new Set());
+  const [notice, setNotice] = useState(null); 
 
-  /* logout: confirm -> loading -> success -> redirect, fully animated */
+  
   const [logoutOpen, setLogoutOpen] = useState(false);
-  const [logoutPhase, setLogoutPhase] = useState('confirm'); // 'confirm' | 'loading' | 'success'
+  const [logoutPhase, setLogoutPhase] = useState('confirm'); 
 
-  /* ── data fetch — existing tables only, no schema changes ──── */
+  
   const fetchUserData = useCallback(async () => {
     setLoading(true);
     try {
@@ -1256,7 +1284,7 @@ const CustomerDashboard = ({ userEmail }) => {
 
   useEffect(() => { fetchUserData(); }, [fetchUserData]);
 
-  /* ── realtime: re-fetch on any change to own appointments ──── */
+  
   useEffect(() => {
     const channel = supabase
       .channel('customer-dashboard-appointments')
@@ -1267,7 +1295,7 @@ const CustomerDashboard = ({ userEmail }) => {
     return () => { supabase.removeChannel(channel); };
   }, [fetchUserData]);
 
-  /* ── derived state ───────────────────────────────────────── */
+  
   const activeRequests = useMemo(
     () => myAppointments.filter(a => !['completed', 'cancelled', 'rejected'].includes((a.status || '').toLowerCase())),
     [myAppointments]
@@ -1276,36 +1304,24 @@ const CustomerDashboard = ({ userEmail }) => {
     () => myAppointments.filter(a => isDoneStatus(a.status)),
     [myAppointments]
   );
-  const completedCount = completedAppointments.length;
-  const latestActive = activeRequests[0] || null;
+  const latestActive = useMemo(() => {
+    const dated = [...activeRequests].sort((a, b) => {
+      const aDate = new Date(`${a.schedule_date || '9999-12-31'}T${a.appointment_time || '23:59:59'}`).getTime();
+      const bDate = new Date(`${b.schedule_date || '9999-12-31'}T${b.appointment_time || '23:59:59'}`).getTime();
+      return aDate - bDate;
+    });
+    return dated[0] || null;
+  }, [activeRequests]);
   const unreadCount = activeRequests.length;
   const lastCompleted = completedAppointments[0] || null;
 
-  /* Progress is derived straight from the live status string —
-     this is the actual bug fix: no more stale "started_at" flags
-     keeping the ring frozen at 67% after a job is done. */
-  const latestActiveProgress = latestActive ? deriveProgressPercent(latestActive) : 0;
-
-  /* Recent history shown under the hero — everything except
-     whatever is already featured as the active hero card. */
+  
   const recentHistory = useMemo(
     () => myAppointments.filter(a => a.id !== latestActive?.id).slice(0, 6),
     [myAppointments, latestActive]
   );
 
-  /* ── detect newly-completed service -> trigger feedback modal ── */
-  useEffect(() => {
-    const justCompleted = completedAppointments.find(
-      a => !a.customer_rating && !seenCompletedRef.current.has(a.id)
-    );
-    if (justCompleted) {
-      seenCompletedRef.current.add(justCompleted.id);
-      setFeedbackTarget(justCompleted);
-      setFeedbackOpen(true);
-    }
-  }, [completedAppointments]);
-
-  /* ── handlers ───────────────────────────────────────────── */
+  
   const openLogoutModal = () => { setLogoutPhase('confirm'); setLogoutOpen(true); };
   const closeLogoutModal = () => { if (logoutPhase !== 'loading') setLogoutOpen(false); };
 
@@ -1341,25 +1357,6 @@ const CustomerDashboard = ({ userEmail }) => {
     }
   };
 
-  const handleFeedbackSubmit = async ({ rating, comment }) => {
-    if (!feedbackTarget) return;
-    try {
-      const { error } = await supabase.from('appointments').update({
-        customer_rating: rating,
-        customer_feedback: comment || null,
-      }).eq('id', feedbackTarget.id);
-      if (!error) {
-        setMyAppointments(prev => prev.map(a => a.id === feedbackTarget.id ? { ...a, customer_rating: rating, customer_feedback: comment } : a));
-        setNotice({ title: 'Feedback Submitted', message: 'Thanks for letting us know how it went.', tone: 'success' });
-      }
-    } catch (err) {
-      console.error('Feedback error:', err);
-    } finally {
-      setFeedbackOpen(false);
-      setFeedbackTarget(null);
-    }
-  };
-
   const handleHelpAction = (action) => {
     if (action === 'hotline') {
       window.location.href = 'tel:+1234567890';
@@ -1378,18 +1375,18 @@ const CustomerDashboard = ({ userEmail }) => {
 
   const todayLabel = useMemo(() => new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' }), []);
 
-  /* ══════════════════════════════════════════════════════════ */
+  
   return (
     <div className="flex min-h-screen bg-[#040810] text-slate-200 font-sans selection:bg-amber-400/30">
 
-      {/* Ambient background — deep navy, single soft amber glow */}
+      {}
       <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
         <div className="absolute top-[-20%] right-[-10%] w-[700px] h-[700px] bg-[#0d1a33] rounded-full blur-[120px]" />
         <div className="absolute bottom-[-10%] left-[-5%] w-[500px] h-[500px] bg-[#0a1428] rounded-full blur-[100px]" />
         <div className="absolute top-[38%] left-[28%] w-[320px] h-[320px] bg-amber-500/[0.04] rounded-full blur-[90px]" />
       </div>
 
-      {/* ── Sidebar (desktop) ─────────────────────────────── */}
+      {}
       <aside className="hidden lg:flex flex-col w-[240px] border-r border-white/[0.05] bg-[#050a15]/85 backdrop-blur-2xl sticky top-0 h-screen z-10">
         <div className="flex items-center gap-3 px-6 pt-7 pb-6 border-b border-white/[0.05]">
           <div className="p-2 bg-gradient-to-br from-amber-400 to-amber-500 rounded-xl shadow-lg shadow-amber-500/25">
@@ -1444,11 +1441,11 @@ const CustomerDashboard = ({ userEmail }) => {
         </div>
       </aside>
 
-      {/* ── Main Content ──────────────────────────────────── */}
+      {}
       <main className="flex-1 overflow-y-auto pb-24 lg:pb-0 relative z-10">
         <AnimatePresence mode="wait">
 
-          {/* ══════════════ DASHBOARD OVERVIEW ══════════════ */}
+          {}
           {view === 'dashboard' && (
             <motion.div
               key="dashboard"
@@ -1459,7 +1456,7 @@ const CustomerDashboard = ({ userEmail }) => {
               className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-7"
             >
 
-              {/* ── HEADER ──────────────────────────────── */}
+              {}
               <header className="flex items-center justify-between mb-7">
                 <div>
                   <h1 className="text-[1.7rem] font-black text-white tracking-tight leading-none mb-1.5">
@@ -1508,96 +1505,21 @@ const CustomerDashboard = ({ userEmail }) => {
                 </div>
               )}
 
-              {/* ── ACTIVE SERVICE (biggest card) ─────────── */}
+              {}
               {!loading && latestActive && (
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.05, duration: 0.5, ease: [0.23, 1, 0.32, 1] }}
-                  className="relative overflow-hidden rounded-[2rem] mb-5 border border-white/[0.08]"
-                >
-                  <div className="absolute inset-0 bg-gradient-to-br from-[#0d1a33] via-[#0a1628] to-[#060e1e]" />
-                  <motion.div
-                    className="absolute top-0 right-0 w-80 h-80 bg-amber-400/[0.07] rounded-full blur-3xl"
-                    animate={{ scale: [1, 1.15, 1], opacity: [0.5, 0.85, 0.5] }}
-                    transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut' }}
-                  />
-                  <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.5) 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
-
-                  <div className="relative z-10 p-6 md:p-9">
-                    <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 mb-6">
-                      <div className="flex items-center gap-5">
-                        <ProgressRing percent={latestActiveProgress} completed={isDoneStatus(latestActive.status)} />
-                        <div>
-                          <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-amber-400/12 border border-amber-400/25 rounded-full mb-3">
-                            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-                            <span className="text-[10px] font-bold text-amber-300 uppercase tracking-widest">
-                              Service In Progress
-                            </span>
-                          </div>
-                          <h2 className="text-2xl md:text-3xl font-black text-white leading-tight mb-1.5">
-                            {latestActive.service_type}
-                          </h2>
-                          <span className={`inline-block text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-full border ${getStatusStyle(latestActive.status)}`}>
-                            {latestActive.status}
-                          </span>
-                        </div>
-                      </div>
-
-                      <motion.button
-                        whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
-                        onClick={() => openDetails(latestActive)}
-                        className="w-full md:w-auto flex items-center justify-center gap-2 px-6 py-3.5 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-[#140f02] rounded-xl font-bold text-[12px] uppercase tracking-wide transition-all shadow-lg shadow-amber-500/25"
-                      >
-                        <Activity size={14} /> Track My Service
-                      </motion.button>
-                    </div>
-
-                    {/* Key facts grid */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                      <div className="bg-white/[0.04] rounded-2xl p-3.5 border border-white/[0.06]">
-                        <p className="text-[9px] font-bold text-amber-300/70 uppercase tracking-widest mb-1.5">Schedule</p>
-                        <div className="flex items-center gap-1.5 text-white font-semibold text-sm">
-                          <Calendar size={13} className="text-slate-500 flex-shrink-0" />
-                          <span className="truncate">{latestActive.schedule_date || 'To be scheduled'}</span>
-                        </div>
-                      </div>
-                      <div className="bg-white/[0.04] rounded-2xl p-3.5 border border-white/[0.06]">
-                        <p className="text-[9px] font-bold text-amber-300/70 uppercase tracking-widest mb-1.5">Time</p>
-                        <div className="flex items-center gap-1.5 text-white font-semibold text-sm">
-                          <Clock size={13} className="text-slate-500 flex-shrink-0" />
-                          <span className="truncate">{latestActive.appointment_time || 'TBD'}</span>
-                        </div>
-                      </div>
-                      <div className="bg-white/[0.04] rounded-2xl p-3.5 border border-white/[0.06]">
-                        <p className="text-[9px] font-bold text-amber-300/70 uppercase tracking-widest mb-1.5">Address</p>
-                        <div className="flex items-center gap-1.5 text-white font-semibold text-sm">
-                          <MapPin size={13} className="text-slate-500 flex-shrink-0" />
-                          <span className="truncate">{latestActive.address || 'Not provided'}</span>
-                        </div>
-                      </div>
-                      {latestActive.priority && (
-                        <div className="bg-white/[0.04] rounded-2xl p-3.5 border border-white/[0.06]">
-                          <p className="text-[9px] font-bold text-amber-300/70 uppercase tracking-widest mb-1.5">Priority</p>
-                          <div className="flex items-center gap-1.5 text-white font-semibold text-sm">
-                            <Flag size={13} className="text-slate-500 flex-shrink-0" />
-                            <span className="truncate capitalize">{latestActive.priority}</span>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </motion.div>
+                <div className="mb-5">
+                  <CurrentAppointmentCard appointment={latestActive} onView={() => openDetails(latestActive)} />
+                </div>
               )}
 
-              {/* ── NO ACTIVE SERVICE ─────────────────────── */}
+              {}
               {!loading && !latestActive && !lastCompleted && (
                 <div className="mb-5">
                   <NoActiveService onBook={() => setView('request')} />
                 </div>
               )}
 
-              {/* ── AFTER-COMPLETION EXPERIENCE ───────────── */}
+              {}
               {!loading && !latestActive && lastCompleted && (
                 <div className="mb-5">
                   <CompletedExperience
@@ -1606,11 +1528,12 @@ const CustomerDashboard = ({ userEmail }) => {
                     report={serviceReports[lastCompleted.id]}
                     onViewReport={() => openDetails(lastCompleted)}
                     onBook={() => setView('request')}
+                    onPayRemaining={setFinalPaymentAppointment}
                   />
                 </div>
               )}
 
-              {/* ── LIVE SERVICE TIMELINE + SERVICE REPORT ── */}
+              {}
               {!loading && latestActive && (
                 <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-5">
                   <div className="space-y-5">
@@ -1626,9 +1549,9 @@ const CustomerDashboard = ({ userEmail }) => {
                     )}
                   </div>
 
-                  {/* ── PAYMENT SUMMARY (small, clean) ──────── */}
+                  {}
                   <div className="space-y-5">
-                    <PaymentSummaryCard appointment={latestActive} />
+                    <PaymentSummaryCard appointment={latestActive} onPayRemaining={setFinalPaymentAppointment} />
                     <motion.button
                       whileHover={{ y: -2 }}
                       whileTap={{ scale: 0.98 }}
@@ -1641,13 +1564,13 @@ const CustomerDashboard = ({ userEmail }) => {
                 </div>
               )}
 
-              {/* ── RECENT SERVICE HISTORY ────────────────── */}
+              {}
               {!loading && <RecentServiceHistory items={recentHistory} onOpen={openDetails} />}
 
             </motion.div>
           )}
 
-          {/* ══════════════ SERVICE DETAILS ══════════════════ */}
+          {}
           {view === 'details' && selectedAppointment && (
             <motion.div
               key="details"
@@ -1683,12 +1606,12 @@ const CustomerDashboard = ({ userEmail }) => {
                         {selectedAppointment.schedule_date || 'Awaiting Confirmation'}
                       </div>
                     </div>
-                    <PaymentSummaryCard appointment={selectedAppointment} />
+                    <PaymentSummaryCard appointment={selectedAppointment} onPayRemaining={setFinalPaymentAppointment} />
                     <div className="bg-white/[0.04] rounded-2xl p-4 border border-white/[0.06]">
                       <p className="text-[9px] font-bold text-amber-300/70 uppercase tracking-widest mb-2">Address</p>
                       <div className="flex items-center gap-2 text-white font-semibold text-sm">
                         <MapPin size={14} className="text-slate-500" />
-                        <span className="truncate">{selectedAppointment.address || 'Not provided'}</span>
+                        <span className="truncate">{selectedAppointment.appointment_address || selectedAppointment.address || 'Not provided'}</span>
                       </div>
                     </div>
                   </div>
@@ -1713,7 +1636,7 @@ const CustomerDashboard = ({ userEmail }) => {
             </motion.div>
           )}
 
-          {/* ══════════════ SUB-VIEWS ════════════════════════ */}
+          {}
           {view === 'logs' && (
             <ServiceLogs
               appointments={myAppointments}
@@ -1746,13 +1669,6 @@ const CustomerDashboard = ({ userEmail }) => {
       <MobileNav view={view} setView={setView} />
       <FloatingHelp onAction={handleHelpAction} />
 
-      <FeedbackModal
-        open={feedbackOpen}
-        serviceName={feedbackTarget?.service_type}
-        onClose={() => { setFeedbackOpen(false); setFeedbackTarget(null); }}
-        onSubmit={handleFeedbackSubmit}
-      />
-
       <NoticeModal
         open={!!notice}
         title={notice?.title}
@@ -1767,6 +1683,19 @@ const CustomerDashboard = ({ userEmail }) => {
         onCancel={closeLogoutModal}
         onConfirm={confirmLogout}
       />
+
+      {finalPaymentAppointment && (
+        <FinalPaymentModal
+          appointment={finalPaymentAppointment}
+          onClose={() => setFinalPaymentAppointment(null)}
+          onSubmitted={() => {
+            setFinalPaymentAppointment(null);
+            setNotice({ title: 'Payment Submitted', message: 'Your final payment is now waiting for cashier verification.', tone: 'info' });
+            fetchUserData();
+          }}
+          onError={(message) => setNotice({ title: 'Payment Submission Failed', message, tone: 'error' })}
+        />
+      )}
 
       <style>{`
         @keyframes shimmer {

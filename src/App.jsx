@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
 import {
   ShieldCheck, Phone, MapPin, Mail, ChevronRight,
   Facebook, Instagram, Zap, Settings, Eye, Lock,
@@ -13,6 +14,8 @@ import Auth from './Auth';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import ManagerDashboard from './pages/Manager/ManagerDashboard';
 import CashierDashboard from './pages/cashier/CashierDashboard';
+import PaymentProcess from './pages/cashier/PaymentProcess';
+import PaymentHistory from './pages/cashier/PaymentHistory';
 import WorkerDashboard from './pages/Worker/WorkerDashboard';
 import CustomerDashboard from './pages/Customer/CustomerDashboard';
 import { supabase } from './supabaseClient';
@@ -24,7 +27,7 @@ import AgentImg1 from './assets/Picture/agent1.jpg';
 import AgentImg2 from './assets/Picture/agent2.jpg';
 import AgentImg3 from './assets/Picture/agent3.jpg';
 
-/* ─── Utility: counter animation hook ─── */
+
 function useCounter(target, duration = 1800, start = false) {
   const [count, setCount] = useState(0);
   useEffect(() => {
@@ -41,7 +44,7 @@ function useCounter(target, duration = 1800, start = false) {
   return count;
 }
 
-/* ─── Stat card with animated counter ─── */
+
 function StatCard({ num, suffix, label, sublabel, icon, delay, animate }) {
   const count = useCounter(num, 1600, animate);
   return (
@@ -55,7 +58,7 @@ function StatCard({ num, suffix, label, sublabel, icon, delay, animate }) {
   );
 }
 
-/* ─── Service card ─── */
+
 function ServiceCard({ icon, title, desc, index }) {
   return (
     <div className="service-card" style={{ animationDelay: `${index * 80}ms` }}>
@@ -73,7 +76,7 @@ function ServiceCard({ icon, title, desc, index }) {
   );
 }
 
-/* ─── Featured Service Card ─── */
+
 function FeaturedServiceCard({ icon, title, desc, price, time, onBook }) {
   return (
     <div className="feat-card">
@@ -97,7 +100,7 @@ function FeaturedServiceCard({ icon, title, desc, price, time, onBook }) {
   );
 }
 
-/* ─── Why Choose Us card ─── */
+
 function WhyCard({ icon, title, desc }) {
   return (
     <div className="why-card">
@@ -108,7 +111,7 @@ function WhyCard({ icon, title, desc }) {
   );
 }
 
-/* ─── Project card ─── */
+
 function ProjectCard({ img, category, location, date, title }) {
   return (
     <div className="project-card">
@@ -128,7 +131,7 @@ function ProjectCard({ img, category, location, date, title }) {
   );
 }
 
-/* ─── Testimonial card ─── */
+
 function TestimonialCard({ name, role, text, stars }) {
   return (
     <div className="testi-card">
@@ -149,7 +152,7 @@ function TestimonialCard({ name, role, text, stars }) {
   );
 }
 
-/* ─── FAQ Item ─── */
+
 function FaqItem({ question, answer }) {
   const [open, setOpen] = useState(false);
   return (
@@ -165,8 +168,9 @@ function FaqItem({ question, answer }) {
   );
 }
 
-/* ─── Main App ─── */
+
 function App() {
+  const location = useLocation();
   const [currentSlide, setCurrentSlide] = useState(0);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [session, setSession] = useState(null);
@@ -245,7 +249,7 @@ function App() {
     { img: HeroImg3, category: 'Fire Safety', location: 'Quezon City', date: 'January 2025', title: 'Hospital Fire Detection System' },
   ];
 
-  /* ── Auth & session ── */
+  
   useEffect(() => {
     const init = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -272,27 +276,27 @@ function App() {
     }
   };
 
-  /* ── Slideshow ── */
+ 
   useEffect(() => {
     const timer = setInterval(() => setCurrentSlide((p) => (p + 1) % images.length), 4500);
     return () => clearInterval(timer);
   }, [images.length]);
 
-  /* ── Scroll behaviors ── */
+  
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 40);
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  /* ── Stats intersection observer ── */
+  
   useEffect(() => {
     const obs = new IntersectionObserver(([e]) => { if (e.isIntersecting) setStatsVisible(true); }, { threshold: 0.3 });
     if (statsRef.current) obs.observe(statsRef.current);
     return () => obs.disconnect();
   }, []);
 
-  /* ── Role-based routing ── */
+  
   if (initializing) {
     return (
       <div className="min-h-screen bg-[#051F24] flex flex-col items-center justify-center">
@@ -308,13 +312,18 @@ function App() {
 
   if (session && userRole === 'admin') return <AdminDashboard onLogout={() => supabase.auth.signOut()} />;
   if (session && userRole === 'manager') return <ManagerDashboard onLogout={() => supabase.auth.signOut()} />;
-  if (session && userRole === 'cashier') return <CashierDashboard onLogout={() => supabase.auth.signOut()} />;
+  if (session && userRole === 'cashier') {
+    const onLogout = () => supabase.auth.signOut();
+    if (location.pathname === '/cashier/payment-process') return <PaymentProcess onLogout={onLogout} />;
+    if (location.pathname === '/cashier/payment-history') return <PaymentHistory onLogout={onLogout} />;
+    return <CashierDashboard onLogout={onLogout} />;
+  }
   if (session && userRole === 'technician') return <WorkerDashboard onLogout={() => supabase.auth.signOut()} />;
   if (session && userRole === 'customer') return <CustomerDashboard userEmail={session.user.email} onLogout={() => supabase.auth.signOut()} />;
 
   return (
     <>
-      {/* ── Global Styles ── */}
+      {}
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,700;1,400&display=swap');
 
@@ -1732,7 +1741,7 @@ function App() {
 
       <Auth isOpen={isAuthOpen} onClose={() => setIsAuthOpen(false)} />
 
-      {/* ── Mobile nav overlay ── */}
+      {}
       <div className={`mobile-nav ${mobileNavOpen ? 'open' : ''}`}>
         <button className="mobile-nav-close" onClick={() => setMobileNavOpen(false)}>
           <XIcon size={28} />
@@ -1745,7 +1754,7 @@ function App() {
         </button>
       </div>
 
-      {/* ── Top bar ── */}
+      {}
       <div className="top-bar">
         <div className="top-bar-badges">
           <div className="top-bar-badge"><CheckCircle2 size={11} /><span>24/7 Technical Support</span></div>
@@ -1760,7 +1769,7 @@ function App() {
         </div>
       </div>
 
-      {/* ── Navbar ── */}
+      {}
       <nav className={`navbar ${scrolled ? 'scrolled' : ''}`}>
         <a href="#" className="nav-logo">
           <div className="nav-hex"><ShieldCheck size={22} /></div>
@@ -1782,14 +1791,14 @@ function App() {
         </button>
       </nav>
 
-      {/* ── Hero ── */}
+      {}
       <header className="hero">
         <div className="hero-bg" />
         <div className="hero-grid" />
         <div className="hero-scanline" />
         <div className="hero-container">
           <div>
-            {/* Rating bar */}
+            {}
             <div className="hero-rating-bar">
               <div className="hero-stars">
                 {[1,2,3,4,5].map(i => <Star key={i} size={14} fill="var(--gold)" color="var(--gold)" />)}
@@ -1812,7 +1821,7 @@ function App() {
               For A Safer Future
             </h1>
 
-            {/* Social proof badges */}
+            {}
             <div className="hero-badges">
               <div className="hero-badge"><BadgeCheck size={12} />Certified Team</div>
               <div className="hero-badge"><ShieldCheck size={12} />Warranty Included</div>
@@ -1850,7 +1859,7 @@ function App() {
         </div>
       </header>
 
-      {/* ── Stats ── */}
+      {}
       <section ref={statsRef} className="stats-section" style={{ paddingTop: 0, paddingBottom: 0 }}>
         <div className="stats-grid">
           <StatCard num={1200} suffix="+" label="Completed Projects" sublabel="Across Metro Manila" icon={<Building2 size={20} />} delay={0} animate={statsVisible} />
@@ -1860,7 +1869,7 @@ function App() {
         </div>
       </section>
 
-      {/* ── Why Choose Us ── */}
+      {}
       <section className="why-section">
         <div className="section-header">
           <div className="section-eyebrow">
@@ -1876,7 +1885,7 @@ function App() {
         </div>
       </section>
 
-      {/* ── Featured Services ── */}
+      {}
       <section className="feat-section">
         <div className="feat-section-inner">
           <div className="section-header">
@@ -1902,7 +1911,7 @@ function App() {
         </div>
       </section>
 
-      {/* ── All Services ── */}
+      {}
       <section id="services" className="services-section">
         <div className="section-header">
           <div className="section-eyebrow">
@@ -1938,7 +1947,7 @@ function App() {
         </div>
       </section>
 
-      {/* ── Recent Projects ── */}
+      {}
       <section id="projects" className="projects-section">
         <div className="projects-inner">
           <div className="section-header">
@@ -1956,7 +1965,7 @@ function App() {
         </div>
       </section>
 
-      {/* ── Testimonials ── */}
+      {}
       <section className="testi-section">
         <div className="section-header" style={{ textAlign: 'center' }}>
           <div className="section-eyebrow" style={{ justifyContent: 'center' }}>
@@ -1967,7 +1976,7 @@ function App() {
           <h2 className="section-title">What Our <em>Clients Say</em></h2>
         </div>
         <div className="testi-track-wrap">
-          {/* Doubled for infinite scroll */}
+          {}
           <div className="testi-track">
             {[...testimonials, ...testimonials].map((t, i) => (
               <TestimonialCard key={i} name={t.name} role={t.role} text={t.text} stars={t.stars} />
@@ -1976,7 +1985,7 @@ function App() {
         </div>
       </section>
 
-      {/* ── FAQ ── */}
+      {}
       <section className="faq-section">
         <div className="faq-inner">
           <div className="section-header" style={{ textAlign: 'center' }}>
@@ -1995,7 +2004,7 @@ function App() {
         </div>
       </section>
 
-      {/* ── Service Coverage ── */}
+      {}
       <section className="coverage-section">
         <div className="section-header" style={{ textAlign: 'center' }}>
           <div className="section-eyebrow" style={{ justifyContent: 'center' }}>
@@ -2016,7 +2025,7 @@ function App() {
         </div>
       </section>
 
-      {/* ── Contact ── */}
+      {}
       <section id="contact" className="contact-section">
         <div className="contact-inner">
           <div className="contact-info">

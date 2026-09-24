@@ -4,7 +4,7 @@ import {
   ChevronRight, Clock, CheckCircle2, Circle, AlertTriangle, Zap,
   Star, Wifi, FileText, Map, Menu, X, ClipboardCheck,
   MessageSquare, ShieldCheck, PlayCircle, Camera, ListChecks,
-  Phone, User, Wrench, History, TrendingUp, Navigation, Sparkles
+  Phone, User, Wrench, History, TrendingUp, Navigation, Sparkles, Package, ImagePlus
 } from 'lucide-react';
 import { supabase } from '../../supabaseClient';
 import { motion, AnimatePresence, useMotionValue, useSpring } from 'framer-motion';
@@ -12,15 +12,6 @@ import { motion, AnimatePresence, useMotionValue, useSpring } from 'framer-motio
 import DeploymentsView from './DeploymentsView';
 import ServiceLogsView from './ServiceLogsView';
 import NetworkMap from './NetworkMap';
-
-/* ============================================================================
-   TECHNICIAN MISSION CONTROL
-   Design system: dark navy canvas + single yellow accent. No other hues are
-   used for brand color — status/priority are communicated through yellow
-   intensity, iconography, and copy rather than a traffic-light palette.
-   ========================================================================== */
-
-/* ----------------------------- helpers ---------------------------------- */
 
 function useCountUp(target, duration = 800) {
   const [value, setValue] = useState(0);
@@ -64,7 +55,7 @@ function formatDuration(ms) {
   return `${h}h ${m}m`;
 }
 
-/* Priority / status communicated via yellow intensity + label, not hue */
+
 const PRIORITY_STYLES = {
   urgent: { label: 'Urgent', text: 'text-amber-300', bg: 'bg-amber-400/15', ring: 'ring-amber-400/40', dot: 'bg-amber-400', glow: 'shadow-[0_0_28px_-6px_rgba(251,191,36,0.45)]' },
   high: { label: 'High Priority', text: 'text-amber-200/90', bg: 'bg-amber-400/10', ring: 'ring-amber-400/25', dot: 'bg-amber-300/80', glow: 'shadow-[0_0_18px_-8px_rgba(251,191,36,0.3)]' },
@@ -84,9 +75,6 @@ const STATUS_META = {
 function statusMeta(s) {
   return STATUS_META[(s || 'pending').toLowerCase()] || STATUS_META.pending;
 }
-
-/* ------------------------- ambient background ---------------------------- */
-/* Decorative only — no data, no layout impact. Respects reduced motion. */
 
 function AmbientBackground() {
   const [reduced, setReduced] = useState(false);
@@ -142,8 +130,6 @@ function AmbientBackground() {
     </div>
   );
 }
-
-/* ----------------------------- atoms ------------------------------------ */
 
 function GlassCard({ children, className = '', hover = true, glow = false, tilt = false, ...props }) {
   const rx = useSpring(0, { stiffness: 200, damping: 20 });
@@ -210,7 +196,6 @@ function StatusBadge({ status }) {
   return <Badge className={`${s.bg} ${s.text} ${s.ring}`}>{s.label}</Badge>;
 }
 
-/* Magnetic wrapper — nudges its child toward the cursor within a small radius */
 function useMagnetic(strength = 14) {
   const x = useSpring(0, { stiffness: 260, damping: 18 });
   const y = useSpring(0, { stiffness: 260, damping: 18 });
@@ -318,7 +303,6 @@ function DashboardSkeleton() {
   );
 }
 
-/* Small animated progress ring used in the Performance panel */
 function ProgressRing({ value, size = 64, stroke = 6, label, sublabel }) {
   const radius = (size - stroke) / 2;
   const circumference = 2 * Math.PI * radius;
@@ -361,9 +345,6 @@ function ProgressRing({ value, size = 64, stroke = 6, label, sublabel }) {
     </div>
   );
 }
-
-/* ------------------------- progress timeline ----------------------------- */
-
 const JOB_STAGES = [
   { key: 'assigned', label: 'Assigned', icon: ClipboardList },
   { key: 'started', label: 'Started', icon: PlayCircle },
@@ -427,7 +408,74 @@ function JobProgressTimeline({ job, reportSubmitted }) {
   );
 }
 
-/* ------------------------------ hero ------------------------------------- */
+function valueOrNull(value) {
+  return value === null || value === undefined || value === '' ? null : value;
+}
+
+function ProjectDetailsDrawer({ open, onClose, details, areas, items, notes, logs, loading }) {
+  const facts = details ? [
+    ['Property', details.property_type],
+    ['Size', [details.property_size, details.property_size_unit].filter(valueOrNull).join(' ')],
+    ['Floors', details.floor_count],
+    ['Rooms', details.room_count],
+  ].filter(([, value]) => valueOrNull(value)) : [];
+  const latestNote = notes?.[0]?.note || notes?.[0]?.content || notes?.[0]?.manager_notes;
+  return <AnimatePresence>{open && <>
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} className="fixed inset-0 z-50 bg-black/65 backdrop-blur-sm" />
+    <motion.aside initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ type: 'spring', stiffness: 300, damping: 32 }} className="fixed inset-y-0 right-0 z-50 w-full max-w-lg overflow-y-auto border-l border-white/[0.08] bg-[#070b14] shadow-[-30px_0_80px_-30px_rgba(0,0,0,.8)]">
+      <div className="sticky top-0 z-10 flex items-center justify-between border-b border-white/[.06] bg-[#070b14]/95 px-5 py-4 backdrop-blur-xl"><div><p className="text-xs font-semibold uppercase tracking-[.18em] text-amber-300">Active assignment</p><h2 className="mt-1 text-lg font-bold text-white">Full project details</h2></div><button onClick={onClose} className="rounded-lg p-2 text-slate-400 hover:bg-white/[.06] hover:text-white"><X size={18} /></button></div>
+      <div className="space-y-6 p-5">{loading ? <p className="text-sm text-slate-400">Loading project information…</p> : <>
+        <section><p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Project details</p>{facts.length ? <div className="mt-3 grid grid-cols-2 gap-3">{facts.map(([label, value]) => <div key={label} className="rounded-xl border border-white/[.06] bg-white/[.03] p-3"><p className="text-xs text-slate-400">{label}</p><p className="mt-1 text-sm font-medium text-slate-100">{value}</p></div>)}</div> : <p className="mt-2 text-sm text-slate-400">No project details provided.</p>}</section>
+        {['customer_requirements', 'customer_comments', 'site_notes'].map((key) => details?.[key] ? <section key={key}><p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{key.replaceAll('_', ' ')}</p><p className="mt-2 rounded-xl border border-white/[.06] bg-white/[.03] p-3 text-sm leading-relaxed text-slate-200">{details[key]}</p></section> : null)}
+        <section><p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Areas</p>{areas?.length ? <div className="mt-3 space-y-2">{areas.map((area, i) => <div key={area.id || i} className="rounded-xl border border-white/[.06] bg-white/[.03] p-3"><p className="text-sm font-medium text-slate-100">{area.area_name || area.name || 'Unnamed area'}</p>{valueOrNull(area.area_size || area.size) && <p className="mt-1 text-xs text-slate-300">{area.area_size || area.size} {area.area_size_unit || area.size_unit || ''}</p>}{area.notes && <p className="mt-1 text-xs leading-relaxed text-slate-400">{area.notes}</p>}</div>)}</div> : <p className="mt-2 text-sm text-slate-400">No areas specified.</p>}</section>
+        <section><p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Required items</p>{items?.length ? <div className="mt-3 space-y-2">{items.map((item, i) => <div key={item.id || i} className="rounded-xl border border-white/[.06] bg-white/[.03] p-3"><p className="text-sm font-medium text-slate-100">{item.item_name || item.name || 'Required item'} <span className="text-slate-400">· Qty {item.quantity}</span></p>{(item.description || item.customer_comment) && <p className="mt-1 text-xs text-slate-400">{item.description || item.customer_comment}</p>}</div>)}</div> : <p className="mt-2 text-sm text-slate-400">No required items listed.</p>}</section>
+        {(latestNote || logs?.length) && <section><p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Latest activity</p>{latestNote && <p className="mt-2 rounded-xl border border-amber-400/15 bg-amber-400/[.05] p-3 text-sm text-slate-200">{latestNote}</p>}{logs?.slice(0, 4).map((log, i) => <p key={log.id || i} className="mt-2 text-sm text-slate-300">{log.action || log.description || 'Job activity'} <span className="text-xs text-slate-500">{timeAgo(log.created_at)}</span></p>)}</section>}
+      </>}</div>
+    </motion.aside>
+  </>}</AnimatePresence>;
+}
+
+function JobWorkspace({ open, onClose, job, related, loading, actionLoading, onStart, onNavigate, onCall }) {
+  const [step, setStep] = useState(0);
+  useEffect(() => { if (open) setStep(0); }, [open, job?.id]);
+  if (!job) return null;
+  const note = related.notes?.[0]?.note || related.notes?.[0]?.content || related.notes?.[0]?.manager_notes || job.manager_notes;
+  const fields = [
+    ['Service', job.service_type], ['Description', job.details], ['Requirements', related.details?.customer_requirements],
+    ['Customer comments', related.details?.customer_comments], ['Site notes', related.details?.site_notes],
+  ].filter(([, value]) => valueOrNull(value));
+  const titles = ['Job overview', 'Service details', 'Areas & items', 'Customer & location', 'Manager notes'];
+  const atFinalStep = step === titles.length - 1;
+  const content = [
+    <div className="grid gap-4 sm:grid-cols-2" key="overview">{[['Service', job.service_type], ['Customer', job.full_name], ['Schedule', [job.schedule_date, job.appointment_time].filter(valueOrNull).join(' · ')], ['Location', job.address], ['Status', statusMeta(job.status).label]].map(([label, value]) => <div key={label} className="rounded-xl border border-white/[.07] bg-white/[.03] p-4"><p className="text-xs font-medium uppercase tracking-wide text-slate-400">{label}</p><p className="mt-1.5 text-sm font-semibold text-slate-100">{valueOrNull(value) || 'Not provided'}</p></div>)}</div>,
+    <div className="space-y-3" key="details">{fields.length ? fields.map(([label, value]) => <div key={label} className="rounded-xl border border-white/[.07] bg-white/[.03] p-4"><p className="text-xs font-medium uppercase tracking-wide text-slate-400">{label}</p><p className="mt-2 text-sm leading-relaxed text-slate-200">{value}</p></div>) : <p className="rounded-xl border border-dashed border-white/[.1] p-5 text-center text-sm text-slate-400">No service details provided.</p>}</div>,
+    <div className="grid gap-5 md:grid-cols-2" key="areas">{[['Service areas', related.areas, (area) => <><p className="text-sm font-semibold text-slate-100">{area.area_name || area.name || 'Unnamed area'}</p>{valueOrNull(area.area_size || area.size) && <p className="mt-1 text-xs text-slate-300">{area.area_size || area.size} {area.area_size_unit || area.size_unit || ''}</p>}{area.notes && <p className="mt-1 text-xs text-slate-400">{area.notes}</p>}</>], ['Service items', related.items, (item) => <><p className="text-sm font-semibold text-slate-100">{item.item_name || item.name || 'Required item'}</p><p className="mt-1 text-xs text-slate-300">Quantity: {item.quantity}</p>{(item.description || item.customer_comment) && <p className="mt-1 text-xs text-slate-400">{item.description || item.customer_comment}</p>}</>]].map(([title, rows, render]) => <section key={title}><p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{title}</p>{rows?.length ? <div className="mt-3 space-y-2">{rows.map((row, i) => <div key={row.id || i} className="rounded-xl border border-white/[.07] bg-white/[.03] p-3">{render(row)}</div>)}</div> : <p className="mt-3 rounded-xl border border-dashed border-white/[.1] p-4 text-center text-sm text-slate-400">No {title.toLowerCase()} specified.</p>}</section>)}</div>,
+    <div className="space-y-4" key="customer"><section className="rounded-xl border border-white/[.07] bg-white/[.03] p-4"><p className="text-xs font-medium uppercase tracking-wide text-slate-400">Customer</p><p className="mt-2 text-lg font-semibold text-white">{job.full_name || 'Customer not provided'}</p>{job.phone && <p className="mt-1 text-sm text-slate-300">{job.phone}</p>}</section><section className="rounded-xl border border-white/[.07] bg-white/[.03] p-4"><p className="text-xs font-medium uppercase tracking-wide text-slate-400">Service address</p><p className="mt-2 text-sm text-slate-200">{job.address || 'Address not provided'}</p></section><div className="flex flex-wrap gap-3"><GhostButton icon={Phone} disabled={!job.phone} onClick={() => onCall(job)}>Call customer</GhostButton><GhostButton icon={Navigation} onClick={() => onNavigate(job)}>Open map</GhostButton></div></div>,
+    <div key="notes">{note ? <div className="rounded-xl border border-amber-400/20 bg-amber-400/[.05] p-5"><p className="text-sm leading-relaxed text-slate-100">{note}</p></div> : <p className="rounded-xl border border-dashed border-white/[.1] p-5 text-center text-sm text-slate-400">No manager instructions available.</p>}</div>,
+  ];
+  return <AnimatePresence>{open && <><motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm" /><motion.div initial={{ opacity: 0, y: 20, scale: .98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 20, scale: .98 }} transition={{ type: 'spring', stiffness: 300, damping: 30 }} className="fixed inset-x-3 top-1/2 z-50 mx-auto flex max-h-[calc(100vh-2rem)] w-auto max-w-4xl -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-white/[.12] bg-[#070b14] shadow-2xl sm:inset-x-6"><div className="flex items-center justify-between border-b border-white/[.07] px-5 py-4"><div><p className="text-xs font-semibold uppercase tracking-[.18em] text-amber-300">Job workspace</p><h2 className="mt-1 text-lg font-bold text-white">{titles[step]}</h2></div><button onClick={onClose} className="rounded-lg p-2 text-slate-400 hover:bg-white/[.06] hover:text-white"><X size={18} /></button></div><div className="flex gap-1.5 border-b border-white/[.06] px-5 py-3">{titles.map((title, index) => <div key={title} className="flex min-w-0 flex-1 items-center gap-1.5"><span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${index === step ? 'bg-amber-400 text-[#070b14]' : index < step ? 'bg-amber-400/15 text-amber-300' : 'bg-white/[.06] text-slate-500'}`}>{String(index + 1).padStart(2, '0')}</span><span className={`hidden truncate text-xs sm:block ${index === step ? 'text-slate-100' : 'text-slate-500'}`}>{title}</span></div>)}</div><div className="min-h-0 overflow-y-auto p-5 md:p-6">{loading ? <p className="text-sm text-slate-400">Loading job information…</p> : <AnimatePresence mode="wait"><motion.div key={step} initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }} transition={{ duration: .16 }}>{content[step]}</motion.div></AnimatePresence>}</div><div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/[.07] px-5 py-4"><GhostButton onClick={step === 0 ? onClose : () => setStep((current) => current - 1)}>{step === 0 ? 'Close' : '← Back'}</GhostButton>{atFinalStep && (job.status || '').toLowerCase() === 'assigned' ? <PrimaryButton loading={actionLoading} icon={PlayCircle} onClick={onStart}>Start service</PrimaryButton> : <PrimaryButton icon={ChevronRight} onClick={() => atFinalStep ? onClose() : setStep((current) => current + 1)}>{atFinalStep ? 'Done' : 'Next →'}</PrimaryButton>}</div></motion.div></>}</AnimatePresence>;
+}
+
+function MissionControl({ job, tasks, details, checklist, related, loading, actionLoading, onStart, onComplete, onNavigate, onOpenDetails, onOpenJobs }) {
+  if (!job) {
+    const assigned = tasks.filter((task) => (task.status || '').toLowerCase() === 'assigned').length;
+    const completed = tasks.filter((task) => (task.status || '').toLowerCase() === 'completed').length;
+    return <div className="grid gap-4 lg:grid-cols-[1.2fr_.8fr]"><GlassCard hover={false} className="p-6"><p className="text-xs font-semibold uppercase tracking-[.18em] text-amber-300">Technician status</p><div className="mt-4 flex items-center gap-3"><span className="h-3 w-3 rounded-full bg-emerald-400 shadow-[0_0_14px_rgba(74,222,128,.7)]" /><div><h1 className="text-2xl font-bold text-white">Available</h1><p className="mt-1 text-sm text-slate-300">No active service assignment</p></div></div><div className="mt-6 grid grid-cols-3 gap-3">{[['Active', 0], ['Assigned', assigned], ['Completed', completed]].map(([label, value]) => <div key={label} className="rounded-xl border border-white/[.07] bg-white/[.03] p-3"><p className="text-xl font-bold text-white">{value}</p><p className="mt-1 text-xs text-slate-400">{label}</p></div>)}</div></GlassCard><GlassCard hover={false} className="p-6"><p className="text-xs font-semibold uppercase tracking-wide text-slate-400">System status</p><div className="mt-4 space-y-3">{['Connected', 'Live updates', 'Notifications'].map((label) => <p key={label} className="flex items-center gap-2 text-sm text-slate-200"><span className="h-2 w-2 rounded-full bg-amber-300" />{label}</p>)}</div></GlassCard></div>;
+  }
+  const status = (job.status || '').toLowerCase();
+  const photoCount = related.photos?.length || 0;
+  const report = related.reports?.[0];
+  const note = related.notes?.[0]?.note || related.notes?.[0]?.content || related.notes?.[0]?.manager_notes || job.manager_notes;
+  const next = status === 'assigned' ? { label: 'Start Job', detail: 'Confirm you have arrived and begin service.', icon: PlayCircle, onClick: onStart } : status === 'in_progress' && !photoCount ? { label: 'Upload Service Photos', detail: 'Document the service before finishing.', icon: Camera, onClick: onOpenJobs } : status === 'in_progress' && !report ? { label: 'Submit Service Report', detail: 'Record the service performed and technician notes.', icon: FileText, onClick: onOpenJobs } : status === 'in_progress' ? { label: 'Complete Service', detail: 'Photos and report are on file. Mark service complete.', icon: CheckCircle2, onClick: onComplete } : { label: job.qc_status ? 'Waiting for QC' : 'Ready for QC', detail: 'Service is complete. Quality review will be handled by the manager.', icon: ShieldCheck };
+  const facts = details ? [['Property', details.property_type], ['Size', [details.property_size, details.property_size_unit].filter(valueOrNull).join(' ')], ['Floors', details.floor_count], ['Rooms', details.room_count]].filter(([, v]) => valueOrNull(v)) : [];
+  const NextIcon = next.icon;
+  return <div className="space-y-4">
+    <GlassCard hover={false} glow className="overflow-hidden p-5 md:p-6"><div className="flex flex-col justify-between gap-5 lg:flex-row lg:items-start"><div className="min-w-0"><p className="text-xs font-semibold uppercase tracking-[.2em] text-amber-300">Today's assignment</p><h1 className="mt-2 text-2xl font-bold text-white md:text-3xl">{job.service_type || 'Service appointment'}</h1><p className="mt-1 text-lg font-medium text-slate-200">{job.full_name || 'Customer'}</p><div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-sm text-slate-300"><span className="flex items-center gap-1.5"><Clock size={14} className="text-amber-300" />{job.schedule_date || 'Date to be confirmed'} · {job.appointment_time || 'Time to be confirmed'}</span><span className="flex items-center gap-1.5"><MapPin size={14} className="text-amber-300" />{job.address || 'Location not provided'}</span></div></div><StatusBadge status={job.status} /></div><div className="mt-5 border-t border-white/[.06] pt-4"><JobProgressTimeline job={job} reportSubmitted={!!report} /></div></GlassCard>
+    <div className="grid gap-4 xl:grid-cols-[1.35fr_.65fr]"><GlassCard hover={false} className="border-amber-400/25 bg-amber-400/[.055] p-5"><p className="text-xs font-semibold uppercase tracking-[.18em] text-amber-300">Next action</p><div className="mt-2 flex items-end justify-between gap-4"><div><h2 className="text-xl font-bold text-white">{next.label}</h2><p className="mt-1 text-sm text-slate-300">{next.detail}</p></div>{next.onClick && <PrimaryButton loading={actionLoading} icon={NextIcon} onClick={next.onClick}>{next.label}</PrimaryButton>}</div></GlassCard><GlassCard hover={false} className="p-5"><p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Service status</p><div className="mt-3 grid grid-cols-3 gap-2 text-center"><div><p className="text-lg font-bold text-white">{photoCount}</p><p className="text-xs text-slate-400">Photos</p></div><div><p className="text-lg font-bold text-white">{report ? 'Yes' : 'No'}</p><p className="text-xs text-slate-400">Report</p></div><div><p className="text-lg font-bold text-amber-300">{job.qc_status || '—'}</p><p className="text-xs text-slate-400">QC</p></div></div></GlassCard></div>
+    <div className="grid gap-4 lg:grid-cols-[1.2fr_.8fr]"><GlassCard hover={false} className="p-5"><div className="flex items-center justify-between gap-3"><p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Project at a glance</p><GhostButton className="px-3 py-2 text-xs" onClick={onOpenDetails} icon={ChevronRight}>Full details</GhostButton></div>{loading ? <p className="mt-4 text-sm text-slate-400">Loading project details…</p> : facts.length ? <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">{facts.map(([label, value]) => <div key={label}><p className="text-xs text-slate-400">{label}</p><p className="mt-1 text-sm font-semibold text-slate-100">{value}</p></div>)}</div> : <p className="mt-4 text-sm text-slate-400">No project details provided.</p>}</GlassCard><GlassCard hover={false} className="p-5">{note ? <><p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-amber-300"><MessageSquare size={13} /> Manager instruction</p><p className="mt-3 text-sm leading-relaxed text-slate-200">{note}</p></> : <><p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Manager instruction</p><p className="mt-3 text-sm text-slate-400">No manager instructions.</p></>}</GlassCard></div>
+    <div className="flex flex-wrap gap-3"><PrimaryButton icon={ChevronRight} onClick={onOpenDetails}>View job</PrimaryButton><GhostButton icon={Navigation} onClick={onNavigate}>Navigate</GhostButton><GhostButton icon={ImagePlus} onClick={onOpenJobs}>Photos & report</GhostButton><GhostButton icon={Package} onClick={onOpenDetails}>Areas & required items</GhostButton></div>
+  </div>;
+}
 
 function MissionHeader({ technicianName, tasks, activeJob }) {
   const now = new Date();
@@ -480,8 +528,6 @@ function MissionHeader({ technicianName, tasks, activeJob }) {
     </GlassCard>
   );
 }
-
-/* --------------------------- active job center --------------------------- */
 
 function ChecklistRow({ done, label, hint }) {
   return (
@@ -548,12 +594,12 @@ function ActiveJobCenter({ job, checklist, onStart, onContinue, onComplete, onNa
         </div>
       </div>
 
-      {/* Progress timeline */}
+      {}
       <div className="relative mt-6 pt-5 border-t border-white/[0.06]">
         <JobProgressTimeline job={job} reportSubmitted={checklist.reportSubmitted} />
       </div>
 
-      {/* Service + manager notes */}
+      {}
       <div className="relative grid grid-cols-1 md:grid-cols-2 gap-3 mt-6">
         <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-3.5">
           <p className="text-slate-500 text-xs uppercase tracking-wide">Service Requested</p>
@@ -570,7 +616,7 @@ function ActiveJobCenter({ job, checklist, onStart, onContinue, onComplete, onNa
         </div>
       </div>
 
-      {/* Completion checklist */}
+      {}
       <div className="relative mt-5 rounded-xl bg-white/[0.02] border border-white/[0.06] p-4">
         <p className="text-slate-400 text-xs uppercase tracking-wide mb-1 flex items-center gap-1.5">
           <ListChecks size={13} /> Job Completion Checklist
@@ -605,8 +651,6 @@ function ActiveJobCenter({ job, checklist, onStart, onContinue, onComplete, onNa
     </GlassCard>
   );
 }
-
-/* ----------------------------- job timeline ------------------------------- */
 
 function TodayTimeline({ tasks, activeJob }) {
   const sorted = useMemo(
@@ -663,8 +707,6 @@ function TodayTimeline({ tasks, activeJob }) {
   );
 }
 
-/* --------------------------- performance panel ----------------------------- */
-
 function PerformancePanel({ tasks }) {
   const completed = tasks.filter((t) => t.status === 'completed');
   const ratings = completed.map((t) => t.customer_rating).filter((r) => typeof r === 'number');
@@ -713,8 +755,6 @@ function PerformancePanel({ tasks }) {
     </GlassCard>
   );
 }
-
-/* ------------------------------ notifications ------------------------------ */
 
 function NotificationCenter({ open, onClose, notifications }) {
   return (
@@ -771,11 +811,6 @@ function NotificationCenter({ open, onClose, notifications }) {
     </AnimatePresence>
   );
 }
-
-/* --------------------------- customer slide-over --------------------------- */
-/* Reads only from data already fetched for this technician (tasks) — no new
-   Supabase queries, no schema changes. Matches other appointments for the
-   same customer to build history. */
 
 function CustomerSlideOver({ open, onClose, job, tasks }) {
   const history = useMemo(() => {
@@ -903,8 +938,6 @@ function CustomerSlideOver({ open, onClose, job, tasks }) {
   );
 }
 
-/* ------------------------------ logout modal ------------------------------- */
-
 function LogoutModal({ open, onClose, onConfirm, activeJob }) {
   return (
     <AnimatePresence>
@@ -950,8 +983,6 @@ function LogoutModal({ open, onClose, onConfirm, activeJob }) {
     </AnimatePresence>
   );
 }
-
-/* --------------------------- floating quick actions ------------------------- */
 
 function QuickActionsDock({ activeJob, onNavigate, onCall, onUploadPhotos, onSubmitReport, onViewCustomer }) {
   const [expanded, setExpanded] = useState(false);
@@ -1013,8 +1044,6 @@ function QuickActionsDock({ activeJob, onNavigate, onCall, onUploadPhotos, onSub
     </div>
   );
 }
-
-/* ------------------------------- navigation --------------------------------- */
 
 const NAV_ITEMS = [
   { key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -1200,8 +1229,6 @@ function TopHeader({ technicianName, onMenuClick, onBellClick, unreadCount }) {
   );
 }
 
-/* =============================== main component ============================== */
-
 export default function TechnicianDashboard({ onLogout }) {
   const [activeModule, setActiveModule] = useState('dashboard');
   const [tasks, setTasks] = useState([]);
@@ -1210,6 +1237,7 @@ export default function TechnicianDashboard({ onLogout }) {
   const [technicianId, setTechnicianId] = useState(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [mapJobId, setMapJobId] = useState(null);
 
   const [notifOpen, setNotifOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
@@ -1224,15 +1252,19 @@ export default function TechnicianDashboard({ onLogout }) {
     qcReady: false,
     photoCount: 0,
   });
+  const [related, setRelated] = useState({ details: null, areas: [], items: [], notes: [], photos: [], reports: [], logs: [], qcReports: [], error: false });
+  const [relatedLoading, setRelatedLoading] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [actionLoading, setActionLoading] = useState(false);
 
-  // ---- unchanged data fetching (Supabase queries preserved) ----
+  
   const fetchTasks = useCallback(async (techId) => {
     try {
       setIsLoading(true);
       const { data, error } = await supabase
         .from('appointments')
         .select('*')
-        .eq('technician_id', techId); // Inalis ang filter na 'assigned' para makita lahat ng status
+        .eq('technician_id', techId); 
 
       if (error) throw error;
       setTasks(data || []);
@@ -1251,7 +1283,7 @@ export default function TechnicianDashboard({ onLogout }) {
         setTechnicianId(user.id);
         fetchTasks(user.id);
 
-        // Setup Realtime (unchanged) — also surfaces a live notification
+        
         const channel = supabase
           .channel('tech-assignments')
           .on('postgres_changes', {
@@ -1282,7 +1314,7 @@ export default function TechnicianDashboard({ onLogout }) {
     [tasks]
   );
 
-  // Read-only checklist data for the active job (job_photos / service_reports / qc_reports)
+  
   useEffect(() => {
     const loadChecklist = async () => {
       if (!activeJob) {
@@ -1304,6 +1336,49 @@ export default function TechnicianDashboard({ onLogout }) {
     };
     loadChecklist();
   }, [activeJob]);
+
+  const loadRelated = useCallback(async (appointmentId) => {
+    if (!appointmentId) return;
+    setRelatedLoading(true);
+    const results = await Promise.all([
+      supabase.from('appointment_project_details').select('*').eq('appointment_id', appointmentId).maybeSingle(),
+      supabase.from('appointment_areas').select('*').eq('appointment_id', appointmentId).order('created_at', { ascending: true }),
+      supabase.from('appointment_items').select('*').eq('appointment_id', appointmentId).order('created_at', { ascending: true }),
+      supabase.from('manager_notes').select('*').eq('appointment_id', appointmentId).order('created_at', { ascending: false }),
+      supabase.from('job_photos').select('*').eq('appointment_id', appointmentId).order('created_at', { ascending: true }),
+      supabase.from('service_reports').select('*').eq('appointment_id', appointmentId).order('created_at', { ascending: false }),
+      supabase.from('job_logs').select('*').eq('appointment_id', appointmentId).order('created_at', { ascending: false }),
+      supabase.from('qc_reports').select('*').eq('appointment_id', appointmentId).order('created_at', { ascending: false }),
+    ]);
+    setRelated({ details: results[0].data || null, areas: results[1].data || [], items: results[2].data || [], notes: results[3].data || [], photos: results[4].data || [], reports: results[5].data || [], logs: results[6].data || [], qcReports: results[7].data || [], error: results.some((result) => result.error) });
+    setRelatedLoading(false);
+  }, []);
+
+  useEffect(() => {
+    if (!activeJob?.id) {
+      setRelated({ details: null, areas: [], items: [], notes: [], photos: [], reports: [], logs: [], qcReports: [], error: false });
+      return;
+    }
+    loadRelated(activeJob.id);
+  }, [activeJob?.id, loadRelated]);
+
+  const updateJobStatus = useCallback(async (job, status) => {
+    if (!job?.id || actionLoading) return;
+    setActionLoading(true);
+    try {
+      const timestampField = status === 'in_progress' ? 'started_at' : 'completed_at';
+      const { error } = await supabase.from('appointments').update({ status, [timestampField]: new Date().toISOString() }).eq('id', job.id);
+      if (error) throw error;
+      await supabase.from('job_logs').insert({ appointment_id: job.id, action: status === 'in_progress' ? 'Started job' : 'Completed service' });
+      await fetchTasks(technicianId);
+      await loadRelated(job.id);
+    } catch (error) {
+      console.error('Unable to update job status:', error);
+      setNotifications((previous) => [{ id: `${Date.now()}`, message: `Unable to update job: ${error.message}`, created_at: new Date().toISOString() }, ...previous].slice(0, 20));
+    } finally {
+      setActionLoading(false);
+    }
+  }, [actionLoading, fetchTasks, loadRelated, technicianId]);
 
   const handleLogoutConfirm = async () => {
     setLogoutModalOpen(false);
@@ -1328,35 +1403,16 @@ export default function TechnicianDashboard({ onLogout }) {
 
     switch (activeModule) {
       case 'assigned':
-        return <DeploymentsView tasks={tasks} onRefresh={() => technicianId && fetchTasks(technicianId)} />;
+        return <DeploymentsView tasks={tasks} onRefresh={() => technicianId && fetchTasks(technicianId)} initialJobId={mapJobId} onInitialJobOpened={() => setMapJobId(null)} />;
       case 'network':
-        return <NetworkMap tasks={tasks} activeJob={activeJob} />;
+        return <NetworkMap tasks={tasks.map((job) => ({ ...job, technician_name: technicianName }))} activeJob={activeJob} onViewJob={(job) => { setMapJobId(job.id); setActiveModule('assigned'); }} />;
       case 'logs':
         return <ServiceLogsView />;
       default:
         return (
-          <div className="space-y-6">
-            <MissionHeader technicianName={technicianName} tasks={tasks} activeJob={activeJob} />
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <div className="lg:col-span-2 space-y-6">
-                <ActiveJobCenter
-                  job={activeJob}
-                  checklist={checklist}
-                  onStart={() => setActiveModule('assigned')}
-                  onContinue={() => setActiveModule('assigned')}
-                  onComplete={() => setActiveModule('assigned')}
-                  onNavigate={handleNavigate}
-                  onCall={handleCall}
-                  onViewCustomer={(job) => setCustomerPanelJob(job)}
-                />
-              </div>
-              <div className="space-y-6">
-                <TodayTimeline tasks={tasks} activeJob={activeJob} />
-                <PerformancePanel tasks={tasks} />
-              </div>
-            </div>
-          </div>
+          <MissionControl job={activeJob} tasks={tasks} details={related.details} checklist={checklist} related={related} loading={relatedLoading} actionLoading={actionLoading}
+            onStart={() => updateJobStatus(activeJob, 'in_progress')} onComplete={() => updateJobStatus(activeJob, 'completed')}
+            onNavigate={() => handleNavigate(activeJob)} onOpenDetails={() => setDetailsOpen(true)} onOpenJobs={() => setActiveModule('assigned')} />
         );
     }
   };
@@ -1415,6 +1471,8 @@ export default function TechnicianDashboard({ onLogout }) {
         job={customerPanelJob}
         tasks={tasks}
       />
+      <JobWorkspace open={detailsOpen} onClose={() => setDetailsOpen(false)} job={activeJob} related={related} loading={relatedLoading} actionLoading={actionLoading}
+        onStart={() => updateJobStatus(activeJob, 'in_progress')} onNavigate={handleNavigate} onCall={handleCall} />
       <LogoutModal
         open={logoutModalOpen}
         onClose={() => setLogoutModalOpen(false)}

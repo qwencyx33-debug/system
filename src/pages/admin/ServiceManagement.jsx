@@ -6,13 +6,10 @@ import {
   Clock, MapPin, Image as ImageIcon, Wallet, Eye,
   ChevronRight, ChevronLeft, Check, AlertCircle,
   RefreshCw, Edit3, Package, DollarSign, Tag, Command,
-  ArrowRight, CheckCircle2, Sparkles, LayoutGrid,
+  ArrowRight, CheckCircle2, Sparkles, LayoutGrid, FolderCog, ArrowUpDown, Trash2,
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 
-/* ────────────────────────────────────────────────────────────
-   DESIGN TOKENS — shared visual language with EditAppointmentModal
-   ──────────────────────────────────────────────────────────── */
 const T = {
   bg:        '#050D10',
   ink:       '#08191D',
@@ -52,12 +49,20 @@ const WIZARD_STEPS = [
 const EMPTY_FORM = {
   title: '', category_id: '', price: '', duration: '',
   requires_survey: false, description: '', image_url: '',
-  downpayment_amount: '', is_percentage_downpayment: true,
+  downpayment_amount: '', is_percentage_downpayment: true, package_items: [],
 };
 
-/* ────────────────────────────────────────────────────────────
-   PRIMITIVES
-   ──────────────────────────────────────────────────────────── */
+const normalizePackageItems = (items) => {
+  if (Array.isArray(items)) return items;
+  if (typeof items !== 'string') return [];
+  try {
+    const parsed = JSON.parse(items);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
 const DarkInput = ({ label, icon, ...props }) => {
   const [focused, setFocused] = useState(false);
   return (
@@ -165,7 +170,7 @@ const GhostBtn = ({ children, ...props }) => (
   </motion.button>
 );
 
-/* Animated count-up used in the stat strip */
+
 const CountUp = ({ value, format }) => {
   const [display, setDisplay] = useState(0);
   useEffect(() => {
@@ -186,7 +191,7 @@ const CountUp = ({ value, format }) => {
   return <>{format ? format(display) : display}</>;
 };
 
-/* Compact live preview card used inside the wizard while creating/editing */
+
 const LivePreviewCard = ({ form, categories }) => {
   const cat = categories.find((c) => c.id === form.category_id)?.name;
   return (
@@ -263,9 +268,6 @@ const LivePreviewCard = ({ form, categories }) => {
   );
 };
 
-/* ────────────────────────────────────────────────────────────
-   SERVICE CARD
-   ──────────────────────────────────────────────────────────── */
 const ServiceCard = ({ service, onEdit, onArchive }) => {
   const [hovered, setHovered] = useState(false);
   const isArchived = service.is_archived;
@@ -288,7 +290,7 @@ const ServiceCard = ({ service, onEdit, onArchive }) => {
         boxShadow: hovered ? '0 20px 50px rgba(0,0,0,0.45), 0 0 0 1px rgba(232,176,0,0.08)' : 'none',
       }}
     >
-      {/* Image */}
+      {}
       <div style={{ position: 'relative', aspectRatio: '16/9', overflow: 'hidden', background: T.ink3 }}>
         {service.image_url ? (
           <img
@@ -346,7 +348,7 @@ const ServiceCard = ({ service, onEdit, onArchive }) => {
         </motion.button>
       </div>
 
-      {/* Body */}
+      {}
       <div style={{ padding: '20px 20px 16px', flex: 1, display: 'flex', flexDirection: 'column', gap: 12 }}>
         <div>
           <h3 style={{ fontFamily: 'Bebas Neue, sans-serif', fontSize: 19, letterSpacing: '0.02em', color: hovered ? T.gold : T.text, margin: 0, lineHeight: 1.15, transition: 'color 0.2s' }}>
@@ -361,6 +363,11 @@ const ServiceCard = ({ service, onEdit, onArchive }) => {
             {service.requires_survey && (
               <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10.5, fontWeight: 700, color: T.info }}>
                 <MapPin size={10} /> Survey Required
+              </span>
+            )}
+            {normalizePackageItems(service.package_items).length > 0 && (
+              <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10.5, fontWeight: 700, color: T.gold }}>
+                <Package size={10} /> {normalizePackageItems(service.package_items).length} included items
               </span>
             )}
           </div>
@@ -413,9 +420,39 @@ const ServiceCard = ({ service, onEdit, onArchive }) => {
   );
 };
 
-/* ────────────────────────────────────────────────────────────
-   WIZARD PROGRESS
-   ──────────────────────────────────────────────────────────── */
+const CategoryOverview = ({ categories, services, activeCategory, onView, onEdit, onAdd }) => (
+  <motion.section
+    initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+    style={{ overflow: 'hidden', marginBottom: 20 }}
+  >
+    <div style={{ padding: 18, borderRadius: 16, background: T.ink, border: `1px solid ${T.border}` }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', marginBottom: 15, flexWrap: 'wrap' }}>
+        <div>
+          <div style={{ color: T.text, fontSize: 14, fontWeight: 800 }}>Categories</div>
+          <div style={{ color: T.sub, fontSize: 11.5, marginTop: 3 }}>Live service counts from your catalog.</div>
+        </div>
+        <button onClick={onAdd} style={{ background: T.goldSoft, border: `1px solid ${T.goldLine}`, color: T.gold, padding: '8px 11px', borderRadius: 8, fontSize: 10.5, fontWeight: 800, cursor: 'pointer' }}><Plus size={12} /> Add Category</button>
+      </div>
+      <div className="sm-category-grid">
+        {categories.map((category) => {
+          const entries = services.filter((service) => service.category_id === category.id);
+          const active = entries.filter((service) => !service.is_archived).length;
+          const archived = entries.length - active;
+          const selected = activeCategory === category.id;
+          return <div key={category.id} style={{ padding: 14, borderRadius: 12, background: selected ? T.goldSoft : T.surface, border: `1px solid ${selected ? T.borderHi : T.border}` }}>
+            <div style={{ color: T.text, fontSize: 12.5, fontWeight: 800, lineHeight: 1.35 }}>{category.name}</div>
+            <div style={{ display: 'flex', gap: 10, color: T.sub, fontSize: 10.5, marginTop: 8 }}><span>{entries.length} services</span><span>{active} active</span><span>{archived} archived</span></div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+              <button onClick={() => onView(selected ? '' : category.id)} style={{ background: 'transparent', border: `1px solid ${T.border}`, color: T.text, borderRadius: 7, padding: '6px 9px', fontSize: 10, fontWeight: 700, cursor: 'pointer' }}>{selected ? 'Clear view' : 'View services'}</button>
+              <button onClick={() => onEdit(category)} style={{ background: 'transparent', border: 'none', color: T.gold, padding: '6px 3px', fontSize: 10, fontWeight: 700, cursor: 'pointer' }}>Edit name</button>
+            </div>
+          </div>;
+        })}
+      </div>
+    </div>
+  </motion.section>
+);
+
 const WizardProgress = ({ currentStep }) => {
   const idx = WIZARD_STEPS.findIndex((s) => s.key === currentStep);
   return (
@@ -454,30 +491,41 @@ const WizardProgress = ({ currentStep }) => {
   );
 };
 
-/* ────────────────────────────────────────────────────────────
-   SERVICE WIZARD (create / edit) — with live preview panel
-   ──────────────────────────────────────────────────────────── */
 const ServiceWizard = ({ isOpen, onClose, editingId, initialForm, categories, onAddCategory, onSave, saving }) => {
   const [step, setStep] = useState('identity');
-  const [form, setForm] = useState(initialForm || EMPTY_FORM);
+  const [form, setForm] = useState(() => ({ ...EMPTY_FORM, ...(initialForm || {}), package_items: normalizePackageItems(initialForm?.package_items) }));
   const [uploading, setUploading] = useState(false);
   const [errors, setErrors] = useState({});
 
   useEffect(() => {
     if (isOpen) {
-      setForm(initialForm || EMPTY_FORM);
+      setForm({ ...EMPTY_FORM, ...(initialForm || {}), package_items: normalizePackageItems(initialForm?.package_items) });
       setStep('identity');
       setErrors({});
     }
   }, [isOpen, editingId]);
 
   const upd = (key, val) => setForm((f) => ({ ...f, [key]: val }));
+  const updatePackageItem = (index, key, value) => setForm((current) => ({
+    ...current,
+    package_items: current.package_items.map((item, itemIndex) => itemIndex === index ? { ...item, [key]: value } : item),
+  }));
+  const addPackageItem = () => setForm((current) => ({
+    ...current, package_items: [...current.package_items, { name: '', quantity: 1, description: '' }],
+  }));
+  const removePackageItem = (index) => setForm((current) => ({
+    ...current, package_items: current.package_items.filter((_, itemIndex) => itemIndex !== index),
+  }));
 
   const validate = () => {
     const e = {};
     if (!form.title.trim()) e.title = 'Required';
     if (!form.category_id)  e.category_id = 'Required';
-    if (!form.price)        e.price = 'Required';
+    if (form.price === '' || !Number.isFinite(Number(form.price)) || Number(form.price) < 0) e.price = 'Enter a valid non-negative package price';
+    form.package_items.forEach((item, index) => {
+      if (!item.name?.trim()) e.package_items = `Included item ${index + 1}: name is required.`;
+      else if (!Number.isFinite(Number(item.quantity)) || Number(item.quantity) <= 0) e.package_items = `Included item ${index + 1}: quantity must be greater than 0.`;
+    });
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -487,7 +535,7 @@ const ServiceWizard = ({ isOpen, onClose, editingId, initialForm, categories, on
       setErrors({ title: !form.title.trim() ? 'Required' : '', category_id: !form.category_id ? 'Required' : '' });
       return;
     }
-    if (step === 'pricing' && !form.price) { setErrors({ price: 'Required' }); return; }
+    if (step === 'pricing' && (form.price === '' || !Number.isFinite(Number(form.price)) || Number(form.price) < 0)) { setErrors({ price: 'Enter a valid non-negative package price' }); return; }
     setErrors({});
     const idx = WIZARD_STEPS.findIndex((s) => s.key === step);
     if (idx < WIZARD_STEPS.length - 1) setStep(WIZARD_STEPS[idx + 1].key);
@@ -550,7 +598,7 @@ const ServiceWizard = ({ isOpen, onClose, editingId, initialForm, categories, on
             overflow: 'hidden', maxHeight: '92vh', display: 'flex', flexDirection: 'column',
           }}
         >
-          {/* Header */}
+          {}
           <div style={{ background: T.ink2, borderBottom: `1px solid ${T.border}`, padding: '22px 28px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'relative', overflow: 'hidden', flexShrink: 0 }}>
             <div style={{ position: 'absolute', inset: 0, background: `radial-gradient(circle at 10% 0%, ${T.goldSoft}, transparent 55%)`, pointerEvents: 'none' }} />
             <div style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -576,7 +624,7 @@ const ServiceWizard = ({ isOpen, onClose, editingId, initialForm, categories, on
             </button>
           </div>
 
-          {/* Body: form column + live preview column */}
+          {}
           <div style={{ overflow: 'hidden', flex: 1, display: 'flex', minHeight: 0 }}>
             <div className="sm-scroll" style={{ overflowY: 'auto', flex: '1 1 55%', padding: '28px 28px', minWidth: 0 }}>
               <WizardProgress currentStep={step} />
@@ -622,6 +670,24 @@ const ServiceWizard = ({ isOpen, onClose, editingId, initialForm, categories, on
                     <div>
                       <DarkInput label="Base Price (PHP) *" type="number" placeholder="0.00" value={form.price} onChange={(e) => upd('price', e.target.value)} icon={<span style={{ fontSize: 13, fontWeight: 700 }}>₱</span>} />
                       {errors.price && <p style={{ fontSize: 11, color: T.danger, marginTop: 5 }}>{errors.price}</p>}
+                    </div>
+
+                    <div style={{ padding: 16, borderRadius: 14, background: T.surface, border: `1px solid ${T.border}` }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+                        <div>
+                          <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.16em', textTransform: 'uppercase', color: T.gold }}>Included Package Items</div>
+                          <div style={{ fontSize: 10.5, color: T.sub, marginTop: 3 }}>Included in the package price; no per-item pricing.</div>
+                        </div>
+                        <button type="button" onClick={addPackageItem} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '8px 10px', borderRadius: 8, color: T.gold, background: T.goldSoft, border: `1px solid ${T.goldLine}`, cursor: 'pointer', fontSize: 10.5, fontWeight: 800 }}><Plus size={13} /> Add Item</button>
+                      </div>
+                      {form.package_items.length === 0 ? <div style={{ padding: '13px', border: `1px dashed ${T.borderHi}`, borderRadius: 10, color: T.sub, fontSize: 11.5, textAlign: 'center' }}>No included items added yet.</div> : <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>{form.package_items.map((item, index) => (
+                        <div key={`package-item-${index}`} style={{ padding: 12, borderRadius: 10, background: T.ink2, border: `1px solid ${T.border}`, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span style={{ color: T.sub, fontSize: 9.5, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase' }}>Item {index + 1}</span><button type="button" onClick={() => removePackageItem(index)} aria-label={`Remove included item ${index + 1}`} style={{ display: 'flex', padding: 4, border: 'none', background: 'transparent', color: T.danger, cursor: 'pointer' }}><Trash2 size={14} /></button></div>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 110px', gap: 10 }}><DarkInput label="Name" placeholder="e.g. CCTV Camera" value={item.name || ''} onChange={(e) => updatePackageItem(index, 'name', e.target.value)} /><DarkInput label="Quantity" type="number" min="1" step="1" value={item.quantity ?? ''} onChange={(e) => updatePackageItem(index, 'quantity', e.target.value)} /></div>
+                          <DarkTextarea label="Description" placeholder="Optional item description" value={item.description || ''} onChange={(e) => updatePackageItem(index, 'description', e.target.value)} style={{ minHeight: 68 }} />
+                        </div>
+                      ))}</div>}
+                      {errors.package_items && <p style={{ fontSize: 11, color: T.danger, margin: '9px 0 0' }}>{errors.package_items}</p>}
                     </div>
 
                     <div style={{ padding: 20, borderRadius: 14, background: T.goldSoft, border: `1px solid ${T.goldLine}` }}>
@@ -723,13 +789,17 @@ const ServiceWizard = ({ isOpen, onClose, editingId, initialForm, categories, on
                           <p style={{ fontSize: 12.5, color: T.text, lineHeight: 1.65, margin: 0 }}>{form.description}</p>
                         </div>
                       )}
+                      <div style={{ padding: '12px 16px', borderRadius: 10, background: T.surface, border: `1px solid ${T.border}` }}>
+                        <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: T.sub, marginBottom: 8 }}>Included Package Items</div>
+                        {form.package_items.length ? <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>{form.package_items.map((item, index) => <div key={`review-package-item-${index}`} style={{ fontSize: 12, color: T.text }}><strong>{item.name || 'Unnamed item'} × {item.quantity || 0}</strong>{item.description ? <span style={{ color: T.sub }}> — {item.description}</span> : null}</div>)}</div> : <div style={{ fontSize: 12, color: T.sub }}>No included items.</div>}
+                      </div>
                     </div>
                   </motion.div>
                 )}
               </AnimatePresence>
             </div>
 
-            {/* Live preview column */}
+            {}
             <div style={{ flex: '0 0 340px', borderLeft: `1px solid ${T.border}`, background: T.ink2, padding: '28px 22px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 14 }} className="sm-scroll sm-preview-col">
               <div style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: '0.16em', textTransform: 'uppercase', color: T.sub, display: 'flex', alignItems: 'center', gap: 7 }}>
                 <Eye size={12} style={{ color: T.gold }} /> Live Preview
@@ -741,7 +811,7 @@ const ServiceWizard = ({ isOpen, onClose, editingId, initialForm, categories, on
             </div>
           </div>
 
-          {/* Footer */}
+          {}
           <div style={{ padding: '18px 28px', borderTop: `1px solid ${T.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0, background: T.ink2 }}>
             <GhostBtn onClick={step === 'identity' ? onClose : handleBack}>
               <ChevronLeft size={14} /> {step === 'identity' ? 'Cancel' : 'Back'}
@@ -762,9 +832,6 @@ const ServiceWizard = ({ isOpen, onClose, editingId, initialForm, categories, on
   );
 };
 
-/* ────────────────────────────────────────────────────────────
-   COMMAND PALETTE
-   ──────────────────────────────────────────────────────────── */
 const CommandPalette = ({ isOpen, onClose, services, onEdit }) => {
   const [query, setQuery] = useState('');
   const inputRef = useRef(null);
@@ -831,9 +898,6 @@ const CommandPalette = ({ isOpen, onClose, services, onEdit }) => {
   );
 };
 
-/* ────────────────────────────────────────────────────────────
-   MAIN PAGE
-   ──────────────────────────────────────────────────────────── */
 const ServiceManagement = () => {
   const [services, setServices] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -846,6 +910,8 @@ const ServiceManagement = () => {
   const [editingForm, setEditingForm] = useState(null);
   const [saving, setSaving] = useState(false);
   const [cmdOpen, setCmdOpen] = useState(false);
+  const [showCategories, setShowCategories] = useState(false);
+  const [sortBy, setSortBy] = useState('newest');
 
   useEffect(() => {
     const handler = (e) => {
@@ -856,18 +922,18 @@ const ServiceManagement = () => {
     return () => window.removeEventListener('keydown', handler);
   }, []);
 
-  useEffect(() => { fetchData(); }, [showArchived]);
-
   const fetchData = useCallback(async () => {
     setLoading(true);
     const [sr, cr] = await Promise.all([
-      supabase.from('service_types').select('*, service_categories(name)').eq('is_archived', showArchived).order('created_at', { ascending: false }),
+      supabase.from('service_types').select('*, service_categories(name)').order('created_at', { ascending: false }),
       supabase.from('service_categories').select('*').order('name'),
     ]);
     if (!sr.error) setServices(sr.data || []);
     if (!cr.error) setCategories(cr.data || []);
     setLoading(false);
-  }, [showArchived]);
+  }, []);
+
+  useEffect(() => { fetchData(); }, [fetchData]);
 
   useEffect(() => {
     const ch = supabase.channel('sm-realtime')
@@ -884,8 +950,21 @@ const ServiceManagement = () => {
     else toast('error', error.message);
   };
 
+  const handleEditCategory = async (category) => {
+    const { value } = await Swal.fire({ ...swalTheme, title: 'Rename Category', input: 'text', inputValue: category.name, inputLabel: 'Category Name', showCancelButton: true });
+    const name = value?.trim();
+    if (!name || name === category.name) return;
+    const { error } = await supabase.from('service_categories').update({ name: name.toUpperCase() }).eq('id', category.id);
+    if (error) { toast('error', error.message); return; }
+    toast('success', 'Category updated');
+    fetchData();
+  };
+
   const handleSave = async (form) => {
     setSaving(true);
+    const package_items = normalizePackageItems(form.package_items)
+      .filter((item) => String(item.name || '').trim() && Number.isFinite(Number(item.quantity)) && Number(item.quantity) > 0)
+      .map((item) => ({ name: String(item.name).trim(), quantity: Number(item.quantity), description: String(item.description || '').trim() }));
     const payload = {
       title: form.title, category_id: form.category_id,
       price: parseFloat(form.price), duration: form.duration || 'N/A',
@@ -893,6 +972,7 @@ const ServiceManagement = () => {
       image_url: form.image_url || '',
       downpayment_amount: parseFloat(form.downpayment_amount || 0),
       is_percentage_downpayment: form.is_percentage_downpayment,
+      package_items,
       is_archived: false,
     };
     try {
@@ -938,7 +1018,7 @@ const ServiceManagement = () => {
 
   const openEdit = (s) => {
     setEditingId(s.id);
-    setEditingForm({ title: s.title, category_id: s.category_id, price: s.price, duration: s.duration, requires_survey: s.requires_survey, description: s.description, image_url: s.image_url, downpayment_amount: s.downpayment_amount, is_percentage_downpayment: s.is_percentage_downpayment });
+    setEditingForm({ title: s.title, category_id: s.category_id, price: s.price, duration: s.duration, requires_survey: s.requires_survey, description: s.description, image_url: s.image_url, downpayment_amount: s.downpayment_amount, is_percentage_downpayment: s.is_percentage_downpayment, package_items: normalizePackageItems(s.package_items) });
     setIsModalOpen(true);
   };
 
@@ -946,16 +1026,21 @@ const ServiceManagement = () => {
     const q = searchQuery.toLowerCase();
     const matchQ = s.title.toLowerCase().includes(q) || s.service_categories?.name?.toLowerCase().includes(q);
     const matchC = !filterCat || s.category_id === filterCat;
-    return matchQ && matchC;
+    return s.is_archived === showArchived && matchQ && matchC;
+  }).sort((a, b) => {
+    if (sortBy === 'name') return a.title.localeCompare(b.title);
+    if (sortBy === 'price-high') return Number(b.price || 0) - Number(a.price || 0);
+    if (sortBy === 'price-low') return Number(a.price || 0) - Number(b.price || 0);
+    return new Date(b.created_at || 0) - new Date(a.created_at || 0);
   });
 
-  const totalRevenue = services.reduce((a, s) => a + (Number(s.price) || 0), 0);
+  const totalRevenue = services.filter((s) => !s.is_archived).reduce((a, s) => a + (Number(s.price) || 0), 0);
 
   const stats = useMemo(() => ([
-    { label: 'Total Services', val: services.length, format: (n) => n, col: T.gold },
+    { label: 'Active Services', val: services.filter((s) => !s.is_archived).length, format: (n) => n, col: T.gold },
     { label: 'Catalog Value', val: totalRevenue, format: (n) => `₱${n.toLocaleString()}`, col: T.success },
     { label: 'Categories', val: categories.length, format: (n) => n, col: T.info },
-  ]), [services.length, totalRevenue, categories.length]);
+  ]), [services, totalRevenue, categories.length]);
 
   return (
     <div style={{ fontFamily: 'DM Sans, sans-serif' }}>
@@ -967,6 +1052,9 @@ const ServiceManagement = () => {
         @media (max-width: 1200px) { .sm-grid { grid-template-columns: repeat(2, 1fr); } }
         @media (max-width: 700px)  { .sm-grid { grid-template-columns: 1fr; } }
         .sm-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+        .sm-category-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+        @media (max-width: 900px) { .sm-category-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+        @media (max-width: 580px) { .sm-category-grid { grid-template-columns: 1fr; } }
         @media (max-width: 640px) { .sm-stats { grid-template-columns: 1fr 1fr; } }
         .sm-scroll::-webkit-scrollbar { width: 5px; }
         .sm-scroll::-webkit-scrollbar-thumb { background: rgba(232,176,0,0.18); border-radius: 3px; }
@@ -978,7 +1066,7 @@ const ServiceManagement = () => {
 
       <CommandPalette isOpen={cmdOpen} onClose={() => setCmdOpen(false)} services={services} onEdit={openEdit} />
 
-      {/* Header */}
+      {}
       <div style={{
         display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 22, flexWrap: 'wrap', gap: 16,
         padding: '22px 24px', borderRadius: 18, position: 'relative', overflow: 'hidden',
@@ -994,16 +1082,20 @@ const ServiceManagement = () => {
             >
               <LayoutGrid size={18} />
             </motion.div>
-            <div style={{ fontFamily: 'Bebas Neue, sans-serif', fontSize: 32, letterSpacing: '0.02em', color: T.text, lineHeight: 1 }}>Service Catalog</div>
+            <div style={{ fontFamily: 'Bebas Neue, sans-serif', fontSize: 32, letterSpacing: '0.02em', color: T.text, lineHeight: 1 }}>Service Management</div>
             <span style={{ background: T.goldSoft, border: `1px solid ${T.goldLine}`, borderRadius: 999, color: T.gold, fontSize: 9.5, fontWeight: 800, letterSpacing: '0.1em', padding: '4px 11px' }}>
               {services.length} {showArchived ? 'ARCHIVED' : 'ACTIVE'}
             </span>
           </div>
           <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', color: T.sub, marginLeft: 52 }}>
-            Service Operations Management
+            Manage your service catalog, categories, pricing and customer requirements.
           </div>
         </div>
         <div style={{ position: 'relative', zIndex: 1, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <button
+            onClick={() => setShowCategories((visible) => !visible)}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderRadius: 10, background: showCategories ? T.goldSoft : T.surface, border: `1px solid ${showCategories ? T.borderHi : T.border}`, color: showCategories ? T.gold : T.sub, fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', cursor: 'pointer' }}
+          ><FolderCog size={13} /> Manage Categories</button>
           <button
             onClick={() => setCmdOpen(true)}
             style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderRadius: 10, background: T.surface, border: `1px solid ${T.border}`, color: T.sub, fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', cursor: 'pointer', transition: 'all 0.18s' }}
@@ -1032,7 +1124,11 @@ const ServiceManagement = () => {
         </div>
       </div>
 
-      {/* Stats */}
+      <AnimatePresence>
+        {showCategories && <CategoryOverview categories={categories} services={services} activeCategory={filterCat} onView={setFilterCat} onEdit={handleEditCategory} onAdd={handleAddCategory} />}
+      </AnimatePresence>
+
+      {}
       <div className="sm-stats" style={{ marginBottom: 20 }}>
         {stats.map((item, i) => (
           <div key={i} style={{ padding: '15px 18px', borderRadius: 14, background: T.surface, border: `1px solid ${T.border}`, display: 'flex', flexDirection: 'column', gap: 5 }}>
@@ -1044,7 +1140,7 @@ const ServiceManagement = () => {
         ))}
       </div>
 
-      {/* Toolbar */}
+      {}
       <div style={{ display: 'flex', gap: 10, marginBottom: 20, flexWrap: 'wrap' }}>
         <div style={{ position: 'relative', flex: '1 1 280px', minWidth: 200 }}>
           <Search size={14} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: T.sub }} />
@@ -1056,6 +1152,13 @@ const ServiceManagement = () => {
             onBlur={(e) => { e.currentTarget.style.borderColor = T.border; e.currentTarget.style.boxShadow = 'none'; }}
           />
         </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '4px 9px', borderRadius: 10, background: T.surface, border: `1px solid ${T.border}` }}>
+          <ArrowUpDown size={13} style={{ color: T.sub }} />
+          <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} aria-label="Sort services" style={{ background: 'transparent', border: 'none', color: T.text, fontSize: 11, fontWeight: 700, outline: 'none', cursor: 'pointer' }}>
+            <option value="newest">Newest</option><option value="name">Name A–Z</option><option value="price-high">Price: high to low</option><option value="price-low">Price: low to high</option>
+          </select>
+        </div>
+        {(searchQuery || filterCat || sortBy !== 'newest') && <button onClick={() => { setSearchQuery(''); setFilterCat(''); setSortBy('newest'); }} style={{ background: 'transparent', color: T.gold, border: 'none', fontSize: 10.5, fontWeight: 800, cursor: 'pointer' }}>Clear filters</button>}
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', padding: '4px', borderRadius: 10, background: T.surface, border: `1px solid ${T.border}` }}>
           <button
             onClick={() => setFilterCat('')}
@@ -1083,7 +1186,7 @@ const ServiceManagement = () => {
         </div>
       </div>
 
-      {/* Grid / states */}
+      {}
       {loading ? (
         <div className="sm-grid">
           {[1, 2, 3, 4, 5, 6].map((i) => (

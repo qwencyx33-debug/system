@@ -9,12 +9,6 @@ import {
   Hash, CreditCard, Flag, PackageOpen, Tag,
 } from 'lucide-react';
 
-/* ════════════════════════════════════════════════════════════
-   BRAND TOKENS — Navy + Gold only, matches the live Dashboard.
-   This page is a pure archive: no progress rings, no live
-   status pulses, no technician-location UI. Those belong on
-   the Dashboard, not here.
-════════════════════════════════════════════════════════════ */
 const GOLD = '#FFC107';
 const NAVY = '#071A3D';
 const CARD = '#0B2350';
@@ -25,14 +19,20 @@ const COMPANY = {
   contact: '+63 2 8123 4567 · support@riontech.ph',
 };
 
-/* ════════════════════════════════════════════════════════════
-   HELPERS
-════════════════════════════════════════════════════════════ */
 const hasVal = (v) =>
   v !== null && v !== undefined && v !== '' &&
   !['n/a', 'na', 'null', 'undefined', '-', '—'].includes(String(v).trim().toLowerCase());
 
 const money = (v) => `₱${Number(v || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}`;
+
+const getPaidAmount = (item) => {
+  const status = (item.payment_status || '').toLowerCase();
+  return ['paid', 'full_paid'].includes(status)
+    ? Number(item.price || 0)
+    : Number(item.actual_paid_amount ?? item.downpayment_paid ?? 0);
+};
+const getBalance = (item) => Math.max(Number(item.price || 0) - getPaidAmount(item), 0);
+const formatStatus = (value) => (value || 'Pending').replaceAll('_', ' ');
 
 const formatDate = (d) => {
   if (!hasVal(d)) return null;
@@ -50,13 +50,10 @@ const formatDateTime = (d) => {
 
 const apptNumber = (item) => `APT-${item.id.slice(0, 8).toUpperCase()}`;
 
-/* Archive statuses only — Pending / Approved / Ongoing / Working
-   are live states and belong on the Dashboard, never here. */
 const STATUS_CONFIG = {
   completed: {
-    label: 'Completed', text: 'text-amber-300', bg: 'bg-amber-400/15', border: 'border-amber-400/30',
-    dot: 'bg-amber-400', glow: 'shadow-[0_0_18px_-2px_rgba(255,193,7,0.45)]', icon: CheckCheck,
-    ring: 'ring-1 ring-amber-400/20',
+    label: 'Completed', text: 'text-emerald-300', bg: 'bg-emerald-400/10', border: 'border-emerald-400/30',
+    dot: 'bg-emerald-400', glow: '', icon: CheckCheck, ring: 'ring-1 ring-emerald-400/15',
   },
   cancelled: {
     label: 'Cancelled', text: 'text-red-300', bg: 'bg-red-500/15', border: 'border-red-400/30',
@@ -72,27 +69,19 @@ const getStatus = (s) => STATUS_CONFIG[s?.toLowerCase()] || STATUS_CONFIG.comple
 const FILTERS = ['All', 'Completed', 'Cancelled', 'Rejected'];
 const ARCHIVE_STATUSES = ['completed', 'cancelled', 'rejected'];
 
-/* ════════════════════════════════════════════════════════════
-   FIELD ROW (auto-hides empty values) — used everywhere so no
-   section ever shows a blank/placeholder field.
-════════════════════════════════════════════════════════════ */
 function InfoTile({ icon: Icon, label, value }) {
   if (!hasVal(value)) return null;
   return (
-    <div className="p-3.5 bg-white/5 border border-white/10 rounded-xl">
+    <div className="p-3.5 bg-white/[0.035] border border-white/[0.08] rounded-xl">
       <div className="flex items-center gap-2 mb-1.5">
         <Icon size={11} className="text-slate-400" />
-        <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">{label}</p>
+        <p className="text-[10px] font-bold text-slate-400">{label}</p>
       </div>
-      <p className="text-[12px] font-bold truncate" style={{ color: TEXT_LIGHT }}>{value}</p>
+      <p className="text-sm font-semibold truncate" style={{ color: TEXT_LIGHT }}>{value}</p>
     </div>
   );
 }
 
-/* ════════════════════════════════════════════════════════════
-   SECTION WRAPPER — hides itself entirely if it ends up with no
-   children rendered (each caller checks its own data first).
-════════════════════════════════════════════════════════════ */
 function Section({ title, icon: Icon, children }) {
   return (
     <motion.div
@@ -110,9 +99,6 @@ function Section({ title, icon: Icon, children }) {
   );
 }
 
-/* ════════════════════════════════════════════════════════════
-   PREMIUM STATUS BADGE
-════════════════════════════════════════════════════════════ */
 function StatusBadge({ status, size = 'sm' }) {
   const cfg = getStatus(status);
   const Icon = cfg.icon;
@@ -133,10 +119,6 @@ function StatusBadge({ status, size = 'sm' }) {
   );
 }
 
-/* ════════════════════════════════════════════════════════════
-   SMALL DATA CHIP — only real database values, e.g. category,
-   payment method. Nothing invented, nothing shown if missing.
-════════════════════════════════════════════════════════════ */
 function Chip({ children }) {
   if (!hasVal(children)) return null;
   return (
@@ -147,10 +129,6 @@ function Chip({ children }) {
   );
 }
 
-/* ════════════════════════════════════════════════════════════
-   ANIMATED PRICE — counts up on mount, then stays static.
-   Purely presentational, uses the real stored amount only.
-════════════════════════════════════════════════════════════ */
 function AnimatedPrice({ value, className, style }) {
   const [display, setDisplay] = useState(0);
   const target = Number(value || 0);
@@ -176,9 +154,6 @@ function AnimatedPrice({ value, className, style }) {
   );
 }
 
-/* ════════════════════════════════════════════════════════════
-   SKELETON CARD
-════════════════════════════════════════════════════════════ */
 function SkeletonCard() {
   return (
     <div className="bg-[#0B2350] border border-white/10 rounded-2xl p-4 relative overflow-hidden">
@@ -195,20 +170,13 @@ function SkeletonCard() {
   );
 }
 
-/* ════════════════════════════════════════════════════════════
-   HISTORY CARD — compact archive record. One glance = service,
-   price, status. No progress bar, no technician-on-map chrome,
-   no ETA. One action: View Service Record.
-
-   Layout (per spec):
-     Left    → Completed icon
-     Center  → Service name (largest) · Appt No · Booked · Completed · tags
-     Right   → TOTAL PAID label + amount, status badge, view button
-════════════════════════════════════════════════════════════ */
 function HistoryCard({ item, onClick, index }) {
   const cfg = getStatus(item.status);
   const StatusIcon = cfg.icon;
   const category = item.service_types?.service_categories?.name;
+  const paid = getPaidAmount(item);
+  const balance = getBalance(item);
+  const schedule = [formatDate(item.schedule_date), item.appointment_time].filter(Boolean).join(' · ');
 
   return (
     <motion.div
@@ -219,36 +187,36 @@ function HistoryCard({ item, onClick, index }) {
       transition={{ delay: Math.min(index * 0.03, 0.24), duration: 0.32, ease: [0.25, 0.46, 0.45, 0.94] }}
       whileHover={{ y: -2, scale: 1.01 }}
       onClick={() => onClick(item)}
-      className={`group relative bg-[#0B2350]/90 backdrop-blur-sm border border-white/10 hover:border-[#FFC107]/40 rounded-2xl px-4 py-3.5 cursor-pointer overflow-hidden transition-all duration-300 hover:shadow-[0_12px_32px_-14px_rgba(255,193,7,0.4)] ${cfg.ring}`}
+      className={`group relative bg-[#080e1c]/90 backdrop-blur-sm border border-white/[0.09] hover:border-[#FFC107]/40 rounded-2xl px-5 py-4 cursor-pointer overflow-hidden transition-all duration-300 hover:shadow-[0_12px_32px_-14px_rgba(255,193,7,0.28)] ${cfg.ring}`}
     >
       <div className="absolute inset-0 bg-gradient-to-br from-[#FFC107]/[0.04] to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
 
       <div className="relative flex items-center gap-4">
-        {/* Left — status icon */}
+        {}
         <div className={`p-2.5 rounded-xl ${cfg.bg} ${cfg.border} border shrink-0`}>
           <StatusIcon size={16} className={cfg.text} />
         </div>
 
-        {/* Center — identity + meta */}
+        {}
         <div className="flex-1 min-w-0">
           <div className="flex items-baseline gap-2 flex-wrap">
-            <h3 className="text-[13.5px] font-black truncate leading-tight" style={{ color: TEXT_LIGHT }}>
+            <h3 className="text-base font-bold truncate leading-tight" style={{ color: TEXT_LIGHT }}>
               {item.service_type}
             </h3>
-            <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider shrink-0">
+            <span className="text-[11px] font-medium text-slate-500 shrink-0">
               {apptNumber(item)}
             </span>
           </div>
 
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
             {hasVal(item.schedule_date) && (
-              <span className="flex items-center gap-1 text-[9.5px] text-slate-400 font-semibold">
-                <Calendar size={9} /> Booked {formatDate(item.schedule_date)}
+              <span className="flex items-center gap-1 text-xs text-slate-400 font-medium">
+                <Calendar size={11} /> Appointment {schedule}
               </span>
             )}
             {hasVal(item.completed_at) && (
-              <span className="flex items-center gap-1 text-[9.5px] text-slate-400 font-semibold">
-                <CheckCircle2 size={9} /> Completed {formatDate(item.completed_at)}
+              <span className="flex items-center gap-1 text-xs text-slate-400 font-medium">
+                <CheckCircle2 size={11} /> Completed {formatDate(item.completed_at)}
               </span>
             )}
           </div>
@@ -261,11 +229,11 @@ function HistoryCard({ item, onClick, index }) {
           )}
         </div>
 
-        {/* Right — price, status, action */}
+        {}
         <div className="flex flex-col items-end gap-1.5 shrink-0 pl-2">
           <div className="text-right">
-            <p className="text-[7.5px] font-black text-slate-500 uppercase tracking-[0.15em] leading-none mb-1">
-              Total Paid
+            <p className="text-[10px] font-semibold text-slate-500 leading-none mb-1">
+              Total amount
             </p>
             <AnimatedPrice
               value={item.price}
@@ -277,12 +245,27 @@ function HistoryCard({ item, onClick, index }) {
         </div>
       </div>
 
+      <div className="relative mt-4 grid grid-cols-1 gap-px overflow-hidden rounded-xl border border-white/[0.07] bg-white/[0.07] sm:grid-cols-3">
+        <div className="min-w-0 bg-[#0a1120] px-3.5 py-3">
+          <p className="text-[10px] font-medium text-slate-500">Payment</p>
+          <p className="mt-1 truncate text-sm font-semibold text-white capitalize">{formatStatus(item.payment_status)}{item.payment_method ? ` · ${item.payment_method}` : ''}</p>
+        </div>
+        <div className="min-w-0 bg-[#0a1120] px-3.5 py-3">
+          <p className="text-[10px] font-medium text-slate-500">Paid · Balance</p>
+          <p className="mt-1 truncate text-sm font-semibold text-white">{money(paid)} <span className="text-slate-500">·</span> <span className="text-amber-300">{money(balance)}</span></p>
+        </div>
+        <div className="min-w-0 bg-[#0a1120] px-3.5 py-3">
+          <p className="text-[10px] font-medium text-slate-500">Service location</p>
+          <p className="mt-1 truncate text-sm font-semibold text-white">{item.appointment_address || item.address || 'Not provided'}</p>
+        </div>
+      </div>
+
       <div className="relative mt-3 flex items-center justify-end border-t border-white/[0.06] pt-2.5">
         <motion.div
           whileHover={{ x: 3 }}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/10 bg-white/[0.04] group-hover:bg-amber-400/15 group-hover:border-amber-400/30 text-[8.5px] font-black uppercase tracking-widest text-slate-300 group-hover:text-amber-300 transition-all"
         >
-          View Service Record
+          View service details
           <motion.span className="inline-flex" whileHover={{ x: 2 }}>
             <ChevronRight size={11} />
           </motion.span>
@@ -292,9 +275,6 @@ function HistoryCard({ item, onClick, index }) {
   );
 }
 
-/* ════════════════════════════════════════════════════════════
-   PHOTO GALLERY + LIGHTBOX (historical job photos, if any)
-════════════════════════════════════════════════════════════ */
 function PhotoGallery({ photos }) {
   const [lightbox, setLightbox] = useState(null);
   if (!photos?.length) return null;
@@ -368,13 +348,6 @@ function PhotoGallery({ photos }) {
   );
 }
 
-/* ════════════════════════════════════════════════════════════
-   SERVICE RECORD MODAL — full historical archive of one
-   appointment. Sections per spec: Customer Info, Appointment
-   Info, Service Info, Technician Info, Payment Summary — plus
-   Photos / Notes / Feedback where real data exists. Nothing
-   live (no progress ring, no ETA, no "on the way" chrome).
-════════════════════════════════════════════════════════════ */
 function ServiceRecordModal({ item, onClose }) {
   const cfg = getStatus(item.status);
   const techName = item.technician
@@ -387,10 +360,14 @@ function ServiceRecordModal({ item, onClose }) {
     ? item.manager_notes_rows
     : (hasVal(item.manager_notes) ? [{ note: item.manager_notes, created_at: item.created_at }] : []);
   const category = item.service_types?.service_categories?.name;
+  const areas = item.appointment_areas || [];
+  const items = item.appointment_items || [];
 
   const subtotal = Number(item.price || 0);
-  const discount = 0; // no discount column exists in schema — always accurate, never invented
+  const discount = 0; 
   const grandTotal = subtotal - discount;
+  const paidAmount = getPaidAmount(item);
+  const remainingBalance = getBalance(item);
 
   const handlePrint = () => window.print();
 
@@ -411,7 +388,7 @@ function ServiceRecordModal({ item, onClose }) {
       >
         <div className="h-1.5 w-full" style={{ background: `linear-gradient(90deg, ${GOLD}, #ffe08a)` }} />
 
-        {/* Header */}
+        {}
         <div className="p-6 border-b border-white/10 flex items-start justify-between gap-4 print:hidden">
           <div className="flex items-center gap-4">
             <div className={`p-3 rounded-2xl ${cfg.bg} ${cfg.border} border`}>
@@ -432,7 +409,7 @@ function ServiceRecordModal({ item, onClose }) {
 
         <div className="overflow-y-auto max-h-[75vh] p-6 space-y-8 print:hidden">
 
-          {/* Customer Information */}
+          {}
           {(hasVal(item.full_name) || hasVal(item.address)) && (
             <Section title="Customer Information" icon={User}>
               <div className="grid grid-cols-2 gap-3">
@@ -442,24 +419,27 @@ function ServiceRecordModal({ item, onClose }) {
             </Section>
           )}
 
-          {/* Appointment Information */}
+          {}
           <Section title="Appointment Information" icon={ClipboardList}>
             <div className="grid grid-cols-2 gap-3">
               <InfoTile icon={Hash} label="Appointment Number" value={apptNumber(item)} />
               <InfoTile icon={Receipt} label="Reference Number" value={item.reference_number} />
               <InfoTile icon={Calendar} label="Booking Date" value={formatDate(item.created_at)} />
+              <InfoTile icon={Calendar} label="Appointment Date" value={formatDate(item.schedule_date)} />
+              <InfoTile icon={Clock} label="Appointment Time" value={item.appointment_time} />
               <InfoTile icon={CheckCircle2} label="Completion Date" value={formatDate(item.completed_at)} />
               <InfoTile icon={Info} label="Status" value={cfg.label} />
               <InfoTile icon={Flag} label="Priority" value={item.priority} />
             </div>
           </Section>
 
-          {/* Service Information */}
+          {}
           <Section title="Service Information" icon={Layers}>
             <div className="grid grid-cols-2 gap-3">
               <InfoTile icon={Wrench} label="Service Name" value={item.service_type} />
               <InfoTile icon={Layers} label="Category" value={category} />
               <InfoTile icon={Timer} label="Estimated Duration" value={item.service_types?.duration} />
+              <InfoTile icon={PackageOpen} label="Quantity" value={item.quantity} />
             </div>
             {hasVal(item.service_types?.description) && (
               <div className="p-4 bg-white/5 border border-white/10 rounded-xl">
@@ -467,9 +447,32 @@ function ServiceRecordModal({ item, onClose }) {
                 <p className="text-[12px] text-slate-300 leading-relaxed">{item.service_types.description}</p>
               </div>
             )}
+            <div className="p-4 bg-white/5 border border-white/10 rounded-xl">
+              <p className="text-[10px] font-bold text-slate-400 mb-1.5">Your request</p>
+              <p className="text-sm text-slate-300 leading-relaxed">{item.details || 'No additional service details provided.'}</p>
+            </div>
           </Section>
 
-          {/* Technician Information */}
+          <Section title="Service Location & Instructions" icon={MapPin}>
+            <div className="grid grid-cols-1 gap-3">
+              <InfoTile icon={MapPin} label="Full service address" value={item.appointment_address || item.address || 'No address provided'} />
+              <div className="p-4 bg-white/5 border border-white/10 rounded-xl">
+                <p className="text-[10px] font-bold text-slate-400 mb-1.5">Special instructions</p>
+                <p className="text-sm text-slate-300 leading-relaxed">{item.special_instructions || item.materials_notes || 'No special instructions provided.'}</p>
+              </div>
+            </div>
+          </Section>
+
+          {(areas.length > 0 || items.length > 0) && (
+            <Section title="Areas & Equipment" icon={PackageOpen}>
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                {areas.length > 0 && <div className="rounded-xl border border-white/10 bg-white/5 p-4"><p className="text-[10px] font-bold text-slate-400 mb-2">Areas / rooms</p>{areas.map((area) => <p key={area.id || area.area_name} className="py-1 text-sm text-slate-300">{area.area_name} <span className="text-slate-500">· Qty {area.quantity || 1}{area.area_size ? ` · ${area.area_size} ${area.area_size_unit || 'sqm'}` : ''}</span></p>)}</div>}
+                {items.length > 0 && <div className="rounded-xl border border-white/10 bg-white/5 p-4"><p className="text-[10px] font-bold text-slate-400 mb-2">Equipment / items</p>{items.map((entry) => <p key={entry.id || entry.item_name} className="py-1 text-sm text-slate-300">{entry.item_name} <span className="text-slate-500">· Qty {entry.quantity || 1}</span></p>)}</div>}
+              </div>
+            </Section>
+          )}
+
+          {}
           {(techName || hasVal(item.assigned_at) || hasVal(item.started_at) || hasVal(item.completed_at) || report?.technician_notes) && (
             <Section title="Technician Information" icon={UserCheck}>
               <div className="grid grid-cols-2 gap-3">
@@ -487,7 +490,7 @@ function ServiceRecordModal({ item, onClose }) {
             </Section>
           )}
 
-          {/* Payment Summary */}
+          {}
           <Section title="Payment Summary" icon={Wallet}>
             <div className="bg-white/5 border border-white/10 rounded-2xl overflow-hidden">
               <div className="p-4 space-y-2.5">
@@ -506,6 +509,14 @@ function ServiceRecordModal({ item, onClose }) {
                 <div className="flex justify-between items-center">
                   <span className="text-[10px] text-slate-400 font-bold uppercase">Subtotal</span>
                   <span className="text-xs font-black" style={{ color: TEXT_LIGHT }}>{money(subtotal)}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-[10px] text-slate-400 font-bold uppercase">Amount Paid</span>
+                  <span className="text-xs font-black" style={{ color: TEXT_LIGHT }}>{money(paidAmount)}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-[10px] text-slate-400 font-bold uppercase">Remaining Balance</span>
+                  <span className="text-xs font-black text-amber-300">{money(remainingBalance)}</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-[10px] text-slate-400 font-bold uppercase">Discount</span>
@@ -529,14 +540,25 @@ function ServiceRecordModal({ item, onClose }) {
             </div>
           </Section>
 
-          {/* Job Photos (archived) */}
+          <Section title="Payment Receipt" icon={Receipt}>
+            {item.receipt_image ? (
+              <a href={item.receipt_image} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-xl border border-white/10 bg-white/5 hover:border-amber-400/40 transition-colors">
+                <img src={item.receipt_image} alt="Payment receipt" className="h-44 w-full object-contain bg-black/20" />
+                <p className="px-4 py-3 text-sm font-semibold text-amber-300">View payment receipt</p>
+              </a>
+            ) : (
+              <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-sm text-slate-400">No receipt has been uploaded yet.</div>
+            )}
+          </Section>
+
+          {}
           {item.job_photos?.length > 0 && (
             <Section title="Job Photos" icon={ImageIcon}>
               <PhotoGallery photos={item.job_photos} />
             </Section>
           )}
 
-          {/* QC Findings (archived) */}
+          {}
           {(qc || hasVal(item.qc_status)) && (qc?.findings || qc?.remarks) && (
             <Section title="Quality Control Findings" icon={ShieldCheck}>
               <div className="p-4 bg-white/5 border border-white/10 rounded-2xl space-y-3">
@@ -546,7 +568,7 @@ function ServiceRecordModal({ item, onClose }) {
             </Section>
           )}
 
-          {/* Manager Notes (archived) */}
+          {}
           {notes.length > 0 && (
             <Section title="Manager Notes" icon={FileText}>
               <div className="space-y-2">
@@ -562,7 +584,7 @@ function ServiceRecordModal({ item, onClose }) {
             </Section>
           )}
 
-          {/* Customer Feedback (archived) */}
+          {}
           {(hasVal(item.customer_rating) || hasVal(item.customer_feedback)) && (
             <Section title="Customer Feedback" icon={Star}>
               <div className="p-4 bg-white/5 border border-white/10 rounded-2xl space-y-2">
@@ -581,7 +603,7 @@ function ServiceRecordModal({ item, onClose }) {
           )}
         </div>
 
-        {/* Footer actions */}
+        {}
         <div className="p-5 border-t border-white/10 flex gap-3 print:hidden">
           <motion.button
             whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
@@ -602,15 +624,11 @@ function ServiceRecordModal({ item, onClose }) {
         </div>
       </motion.div>
 
-      {/* ══════════════════════════════════════════════════════
-          PRINTABLE-ONLY INVOICE — A4 professional service
-          invoice, not a POS strip. Only this block is visible
-          when printing (see @media print rules below).
-      ══════════════════════════════════════════════════════ */}
+      {}
       <div id="printable-receipt" className="hidden print:block">
         <div style={{ padding: '36px', fontFamily: 'Georgia, "Times New Roman", serif', color: '#0f172a' }}>
 
-          {/* Letterhead */}
+          {}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: `4px solid ${NAVY}`, paddingBottom: '18px', marginBottom: '22px' }}>
             <div style={{ display: 'flex', gap: '14px', alignItems: 'center' }}>
               <div style={{ width: '52px', height: '52px', borderRadius: '14px', background: NAVY, display: 'flex', alignItems: 'center', justifyContent: 'center', color: GOLD, fontWeight: 900, fontSize: '20px', fontFamily: 'Arial, sans-serif' }}>R</div>
@@ -628,7 +646,7 @@ function ServiceRecordModal({ item, onClose }) {
             </div>
           </div>
 
-          {/* Bill-to / Service meta */}
+          {}
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: '24px', marginBottom: '22px', fontFamily: 'Arial, sans-serif' }}>
             <div style={{ flex: 1 }}>
               <p style={{ fontSize: '9px', fontWeight: 900, letterSpacing: '1px', color: '#94a3b8', margin: '0 0 6px' }}>BILLED TO</p>
@@ -642,7 +660,7 @@ function ServiceRecordModal({ item, onClose }) {
             </div>
           </div>
 
-          {/* Line items */}
+          {}
           <table style={{ width: '100%', fontSize: '11px', borderCollapse: 'collapse', fontFamily: 'Arial, sans-serif', marginBottom: '20px' }}>
             <thead>
               <tr style={{ background: NAVY, color: '#fff' }}>
@@ -662,7 +680,7 @@ function ServiceRecordModal({ item, onClose }) {
             </tbody>
           </table>
 
-          {/* Reference + totals */}
+          {}
           <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: 'Arial, sans-serif' }}>
             <div>
               {hasVal(item.payment_ref || item.reference_number) && (
@@ -682,7 +700,7 @@ function ServiceRecordModal({ item, onClose }) {
             </div>
           </div>
 
-          {/* Signatures */}
+          {}
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: '40px', marginTop: '64px', fontFamily: 'Arial, sans-serif' }}>
             <div style={{ flex: 1, textAlign: 'center' }}>
               <div style={{ borderTop: '1px solid #0f172a', paddingTop: '6px' }}>
@@ -705,9 +723,6 @@ function ServiceRecordModal({ item, onClose }) {
   );
 }
 
-/* ════════════════════════════════════════════════════════════
-   FILTER DROPDOWN
-════════════════════════════════════════════════════════════ */
 function FilterDropdown({ value, onChange }) {
   const [open, setOpen] = useState(false);
   return (
@@ -748,9 +763,6 @@ function FilterDropdown({ value, onChange }) {
   );
 }
 
-/* ════════════════════════════════════════════════════════════
-   PREMIUM EMPTY STATE
-════════════════════════════════════════════════════════════ */
 function EmptyState({ hasFilters, onReset }) {
   return (
     <motion.div
@@ -782,12 +794,10 @@ function EmptyState({ hasFilters, onReset }) {
   );
 }
 
-/* ════════════════════════════════════════════════════════════
-   MAIN COMPONENT — Appointment History (archive)
-════════════════════════════════════════════════════════════ */
 const ServiceHistory = ({ onBack }) => {
   const [appointments, setAppointments] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [activeFilter, setActiveFilter] = useState('All');
   const [selected, setSelected] = useState(null);
@@ -812,9 +822,26 @@ const ServiceHistory = ({ onBack }) => {
         .in('status', ARCHIVE_STATUSES)
         .order('created_at', { ascending: false });
       if (error) throw error;
-      setAppointments(data || []);
+      const appointmentIds = (data || []).map((appointment) => appointment.id);
+      const [areasRes, itemsRes] = await Promise.all([
+        appointmentIds.length ? supabase.from('appointment_areas').select('*').in('appointment_id', appointmentIds) : Promise.resolve({ data: [] }),
+        appointmentIds.length ? supabase.from('appointment_items').select('*').in('appointment_id', appointmentIds) : Promise.resolve({ data: [] }),
+      ]);
+      const areasByAppointment = (areasRes.data || []).reduce((map, area) => {
+        (map[area.appointment_id] ||= []).push(area); return map;
+      }, {});
+      const itemsByAppointment = (itemsRes.data || []).reduce((map, entry) => {
+        (map[entry.appointment_id] ||= []).push(entry); return map;
+      }, {});
+      setAppointments((data || []).map((appointment) => ({
+        ...appointment,
+        appointment_areas: areasByAppointment[appointment.id] || [],
+        appointment_items: itemsByAppointment[appointment.id] || [],
+      })));
+      setLoadError(false);
     } catch (err) {
       console.error(err.message);
+      setLoadError(true);
     } finally {
       setLoading(false);
     }
@@ -836,7 +863,7 @@ const ServiceHistory = ({ onBack }) => {
       const match = appointments.find(a => a.id === selected.id);
       if (match) setSelected(match);
     }
-  }, [appointments]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [appointments]); 
 
   const filtered = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
@@ -875,7 +902,7 @@ const ServiceHistory = ({ onBack }) => {
         }
       `}</style>
 
-      {/* Sticky glass header */}
+      {}
       <motion.div
         initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }}
         className="sticky top-0 z-30 -mx-1 px-1 pt-2 pb-4 backdrop-blur-xl border-b border-white/[0.06]"
@@ -887,7 +914,7 @@ const ServiceHistory = ({ onBack }) => {
 
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-5">
           <div>
-            <h2 className="text-2xl md:text-3xl font-black tracking-tight" style={{ color: TEXT_LIGHT }}>Appointment History</h2>
+            <h2 className="text-2xl md:text-3xl font-black tracking-tight" style={{ color: TEXT_LIGHT }}>Service history</h2>
             <p className="text-[11px] font-semibold text-slate-400 mt-1.5">View your completed services, receipts, and previous appointments.</p>
           </div>
 
@@ -932,10 +959,15 @@ const ServiceHistory = ({ onBack }) => {
         )}
       </motion.div>
 
-      {/* Records */}
+      {}
       <div className="px-1 pt-5">
         {loading ? (
           <div className="space-y-3">{[1, 2, 3].map(i => <SkeletonCard key={i} />)}</div>
+        ) : loadError ? (
+          <div className="rounded-2xl border border-red-400/20 bg-red-500/[0.06] px-6 py-12 text-center">
+            <p className="text-base font-bold text-white">We couldn’t load your appointments.</p>
+            <button onClick={fetchAppointments} className="mt-4 text-sm font-semibold text-amber-300 hover:text-amber-200">Try again</button>
+          </div>
         ) : filtered.length === 0 ? (
           <EmptyState hasFilters={hasActiveFilters} onReset={resetFilters} />
         ) : (

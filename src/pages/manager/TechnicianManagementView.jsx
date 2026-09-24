@@ -10,9 +10,6 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '../../supabaseClient';
 
-// ─── HELPERS ──────────────────────────────────────────────────────────────────
-
-// Derives live stats per technician from appointments data (no DB change needed)
 const mergeTechStats = (technicians, appointments) => {
   return technicians.map(tech => {
     const techJobs = appointments.filter(a => a.technician_id === tech.id);
@@ -22,7 +19,7 @@ const mergeTechStats = (technicians, appointments) => {
     const total      = techJobs.length;
     const rate       = total > 0 ? Math.round((completed / total) * 100) : 0;
 
-    // Derive live status from appointments
+    
     let liveStatus = 'available';
     if (inProgress > 0) liveStatus = 'on-job';
     else if (pending > 0) liveStatus = 'standby';
@@ -48,7 +45,7 @@ const AVATAR_COLORS = [
 const avatarColor = (id) =>
   AVATAR_COLORS[parseInt(id?.slice(-2) || '0', 16) % AVATAR_COLORS.length];
 
-// ─── STATUS BADGE ─────────────────────────────────────────────────────────────
+
 
 const StatusDot = ({ status }) => {
   const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.available;
@@ -66,8 +63,6 @@ const StatusDot = ({ status }) => {
     </span>
   );
 };
-
-// ─── METRIC CARD ─────────────────────────────────────────────────────────────
 
 const MetricCard = ({ label, value, sub, color, icon: Icon, delay = 0 }) => (
   <motion.div
@@ -89,8 +84,6 @@ const MetricCard = ({ label, value, sub, color, icon: Icon, delay = 0 }) => (
   </motion.div>
 );
 
-// ─── TECHNICIAN CARD (Grid) ───────────────────────────────────────────────────
-
 const TechCard = ({ tech, index, onClick }) => {
   const color   = avatarColor(tech.id);
   const initials = getInitials(tech.first_name, tech.last_name);
@@ -107,19 +100,19 @@ const TechCard = ({ tech, index, onClick }) => {
       className="group relative rounded-2xl overflow-hidden cursor-pointer transition-all hover:border-white/10"
       style={{ background: '#0a0f18', border: '1px solid rgba(255,255,255,0.06)' }}
     >
-      {/* Top accent bar */}
+      {}
       <div className="h-0.5 w-full transition-all" style={{ background: `linear-gradient(90deg, ${color}80, transparent)` }} />
 
       <div className="p-5">
-        {/* Header row */}
+        {}
         <div className="flex items-start gap-4 mb-5">
-          {/* Avatar */}
+          {}
           <div className="relative flex-shrink-0">
             <div className="w-12 h-12 rounded-xl flex items-center justify-center text-[13px] font-black transition-transform group-hover:scale-110"
               style={{ background: `${color}20`, color, border: `1px solid ${color}30` }}>
               {initials}
             </div>
-            {/* Status indicator */}
+            {}
             <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-md border-2 flex items-center justify-center"
               style={{ background: STATUS_CONFIG[tech.liveStatus]?.color || '#10b981', borderColor: '#0a0f18' }}>
               {tech.liveStatus === 'on-job'
@@ -144,7 +137,7 @@ const TechCard = ({ tech, index, onClick }) => {
           <ChevronRight size={14} className="text-slate-700 group-hover:text-slate-400 transition-colors flex-shrink-0 mt-1" />
         </div>
 
-        {/* Stats row */}
+        {}
         <div className="grid grid-cols-3 gap-2 mb-4">
           {[
             { label: 'Total',     value: tech.total,     color: 'rgba(148,163,184,0.8)' },
@@ -159,7 +152,7 @@ const TechCard = ({ tech, index, onClick }) => {
           ))}
         </div>
 
-        {/* Completion bar */}
+        {}
         <div>
           <div className="flex items-center justify-between mb-1.5">
             <p className="text-[8px] font-black uppercase tracking-widest text-slate-600">Completion Rate</p>
@@ -188,8 +181,6 @@ const TechCard = ({ tech, index, onClick }) => {
   );
 };
 
-// ─── TECHNICIAN ROW (List) ────────────────────────────────────────────────────
-
 const TechRow = ({ tech, index, onClick }) => {
   const color    = avatarColor(tech.id);
   const initials = getInitials(tech.first_name, tech.last_name);
@@ -203,7 +194,7 @@ const TechRow = ({ tech, index, onClick }) => {
       className="group flex items-center gap-4 p-4 rounded-xl cursor-pointer transition-all hover:border-white/10"
       style={{ background: '#0a0f18', border: '1px solid rgba(255,255,255,0.05)' }}
     >
-      {/* Avatar */}
+      {}
       <div className="relative flex-shrink-0">
         <div className="w-10 h-10 rounded-xl flex items-center justify-center text-[11px] font-black"
           style={{ background: `${color}20`, color, border: `1px solid ${color}25` }}>
@@ -215,7 +206,7 @@ const TechRow = ({ tech, index, onClick }) => {
         </div>
       </div>
 
-      {/* Name */}
+      {}
       <div className="flex-1 min-w-0">
         <p className="text-[12px] font-black text-white tracking-tight group-hover:text-[#EAB308] transition-colors truncate">
           {tech.first_name} {tech.last_name}
@@ -225,12 +216,12 @@ const TechRow = ({ tech, index, onClick }) => {
         </p>
       </div>
 
-      {/* Status */}
+      {}
       <div className="hidden sm:block flex-shrink-0">
         <StatusDot status={tech.liveStatus} />
       </div>
 
-      {/* Quick stats */}
+      {}
       <div className="hidden md:flex items-center gap-6 flex-shrink-0">
         {[
           { label: 'Jobs', value: tech.total },
@@ -244,7 +235,7 @@ const TechRow = ({ tech, index, onClick }) => {
         ))}
       </div>
 
-      {/* Rate bar */}
+      {}
       <div className="hidden lg:block w-24 flex-shrink-0">
         <div className="flex items-center justify-between mb-1">
           <p className="text-[7px] font-black uppercase tracking-widest text-slate-600">Rate</p>
@@ -265,8 +256,6 @@ const TechRow = ({ tech, index, onClick }) => {
   );
 };
 
-// ─── DETAIL PANEL ─────────────────────────────────────────────────────────────
-
 const TechDetailPanel = ({ tech, onClose }) => {
   if (!tech) return null;
   const color    = avatarColor(tech.id);
@@ -282,7 +271,7 @@ const TechDetailPanel = ({ tech, onClose }) => {
     >
       <div className="h-0.5 w-full flex-shrink-0" style={{ background: color }} />
 
-      {/* Header */}
+      {}
       <div className="p-6 flex-shrink-0" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
         <div className="flex items-start justify-between mb-5">
           <StatusDot status={tech.liveStatus} />
@@ -305,11 +294,11 @@ const TechDetailPanel = ({ tech, onClose }) => {
         </div>
       </div>
 
-      {/* Body */}
+      {}
       <div className="flex-1 overflow-y-auto p-6 space-y-5"
         style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.08) transparent' }}>
 
-        {/* Contact info */}
+        {}
         <div className="space-y-2">
           <p className="text-[8px] font-black uppercase tracking-[0.2em] text-slate-600 mb-3">Contact</p>
           {[
@@ -325,7 +314,7 @@ const TechDetailPanel = ({ tech, onClose }) => {
           ))}
         </div>
 
-        {/* Performance stats */}
+        {}
         <div>
           <p className="text-[8px] font-black uppercase tracking-[0.2em] text-slate-600 mb-3">Performance</p>
           <div className="grid grid-cols-2 gap-2 mb-4">
@@ -343,7 +332,7 @@ const TechDetailPanel = ({ tech, onClose }) => {
             ))}
           </div>
 
-          {/* Completion rate bar */}
+          {}
           <div className="p-4 rounded-xl" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)' }}>
             <div className="flex items-center justify-between mb-2">
               <p className="text-[9px] font-black uppercase tracking-widest text-slate-500">Completion Rate</p>
@@ -360,7 +349,7 @@ const TechDetailPanel = ({ tech, onClose }) => {
           </div>
         </div>
 
-        {/* Tech ID */}
+        {}
         <div className="p-4 rounded-xl" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)' }}>
           <p className="text-[8px] font-black uppercase tracking-[0.2em] text-slate-600 mb-1">Technician ID</p>
           <p className="text-[10px] font-black text-slate-400 tracking-widest font-mono">{tech.id}</p>
@@ -371,18 +360,14 @@ const TechDetailPanel = ({ tech, onClose }) => {
   );
 };
 
-// ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
-
 const TechnicianManagementView = () => {
   const [technicians,   setTechnicians]   = useState([]);
   const [appointments,  setAppointments]  = useState([]);
   const [searchTerm,    setSearchTerm]    = useState('');
   const [isLoading,     setIsLoading]     = useState(true);
-  const [viewMode,      setViewMode]      = useState('grid');  // 'grid' | 'list'
+  const [viewMode,      setViewMode]      = useState('grid');  
   const [statusFilter,  setStatusFilter]  = useState('all');
   const [selectedTech,  setSelectedTech]  = useState(null);
-
-  // ── Fetch ──────────────────────────────────────────────────────────────────
 
   const fetchAll = async () => {
     setIsLoading(true);
@@ -407,8 +392,6 @@ const TechnicianManagementView = () => {
     return () => supabase.removeChannel(channel);
   }, []);
 
-  // ── Derived ────────────────────────────────────────────────────────────────
-
   const enriched = useMemo(() => mergeTechStats(technicians, appointments), [technicians, appointments]);
 
   const filtered = useMemo(() => enriched.filter(t => {
@@ -425,12 +408,10 @@ const TechnicianManagementView = () => {
     ? Math.round(enriched.reduce((a, t) => a + t.rate, 0) / enriched.length)
     : 0;
 
-  // ── Render ────────────────────────────────────────────────────────────────
-
   return (
     <div className="min-h-screen w-full pb-20" style={{ background: '#020617' }}>
 
-      {/* Backdrop for panel */}
+      {}
       <AnimatePresence>
         {selectedTech && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -446,7 +427,7 @@ const TechnicianManagementView = () => {
 
       <div className="max-w-[1600px] mx-auto px-6 py-8 space-y-6">
 
-        {/* ── TOP BAR ── */}
+        {}
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 mb-2">
@@ -460,7 +441,7 @@ const TechnicianManagementView = () => {
             <p className="text-[10px] font-bold uppercase tracking-widest mt-1 text-slate-600">Field Personnel Monitoring</p>
           </div>
 
-          {/* View toggle */}
+          {}
           <div className="flex items-center rounded-xl overflow-hidden flex-shrink-0"
             style={{ border: '1px solid rgba(255,255,255,0.07)' }}>
             {[
@@ -476,7 +457,7 @@ const TechnicianManagementView = () => {
           </div>
         </div>
 
-        {/* ── METRICS ── */}
+        {}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <MetricCard label="Total Personnel" value={enriched.length} sub="registered"       color="#EAB308" icon={Users}     delay={0}    />
           <MetricCard label="On Job"           value={onJob}           sub="currently active" color="#EAB308" icon={Zap}       delay={0.05} />
@@ -484,9 +465,9 @@ const TechnicianManagementView = () => {
           <MetricCard label="Avg Completion"   value={`${avgRate}%`}  sub="completion rate"  color="#3b82f6" icon={TrendingUp} delay={0.15} />
         </div>
 
-        {/* ── CONTROL BAR ── */}
+        {}
         <div className="flex flex-col sm:flex-row gap-3">
-          {/* Search */}
+          {}
           <div className="relative flex-1 group">
             <Search size={14} className="absolute left-4 top-1/2 -translate-y-1/2 transition-colors"
               style={{ color: searchTerm ? '#EAB308' : 'rgba(100,116,139,0.6)' }} />
@@ -500,7 +481,7 @@ const TechnicianManagementView = () => {
             />
           </div>
 
-          {/* Status filter */}
+          {}
           <div className="flex items-center gap-1 p-1 rounded-xl flex-shrink-0"
             style={{ background: '#0a0f18', border: '1px solid rgba(255,255,255,0.06)' }}>
             {[
@@ -525,7 +506,7 @@ const TechnicianManagementView = () => {
           </div>
         </div>
 
-        {/* ── CONTENT ── */}
+        {}
         {isLoading ? (
           <div className="flex flex-col items-center justify-center py-32 gap-4" style={{ color: 'rgba(71,85,105,0.8)' }}>
             <Loader2 className="animate-spin" size={32} />
@@ -551,7 +532,7 @@ const TechnicianManagementView = () => {
           </motion.div>
         ) : (
           <div className="space-y-2">
-            {/* List header */}
+            {}
             <div className="hidden lg:grid grid-cols-[1fr_120px_200px_140px_100px_20px] gap-4 px-4 pb-2">
               {['Technician', 'Status', 'Job Counts', 'Completion', ''].map(h => (
                 <p key={h} className="text-[8px] font-black uppercase tracking-[0.2em] text-slate-600">{h}</p>

@@ -3,13 +3,11 @@ import { supabase } from '../../supabaseClient';
 import { RefreshCw, Database, AlertCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
 
-// I-import ang iyong mga sub-components (AnalyticsHeader, FilterBar, etc.) dito...
-
 const ServiceLogsView = () => {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // 1. PINAKA-IMPORTANT: Robust Fetching Logic
+  
   const fetchLogs = useCallback(async () => {
     setLoading(true);
     const { data, error } = await supabase
@@ -38,7 +36,7 @@ const ServiceLogsView = () => {
     setLoading(false);
   }, []);
 
-  // 2. Realtime Subscription (para laging updated ang data nang walang manual refresh)
+  
   useEffect(() => {
     fetchLogs();
 
@@ -52,7 +50,7 @@ const ServiceLogsView = () => {
     return () => supabase.removeChannel(channel);
   }, [fetchLogs]);
 
-  // 3. Logic para sa pag-update ng records
+  
   const handleUpdate = async (id, updatedData) => {
     const { error } = await supabase
       .from('service_reports')
@@ -62,14 +60,14 @@ const ServiceLogsView = () => {
     if (error) {
       alert("Update failed: " + error.message);
     } else {
-      // Magtiwala sa Realtime, pero pwede ring i-trigger manual
+      
       fetchLogs();
     }
   };
 
   return (
     <div className="h-full flex flex-col p-4 gap-4">
-      {/* Header section with loading state */}
+      {}
       {loading ? (
         <div className="flex items-center gap-2 text-slate-500 text-xs">
           <RefreshCw className="animate-spin" size={14} /> Synchronizing with database...
@@ -83,7 +81,7 @@ const ServiceLogsView = () => {
         </div>
       )}
 
-      {/* Dito papasok ang iyong list/details components gamit ang 'logs' state */}
+      {}
       <div className="flex-1 overflow-hidden">
         {logs.length === 0 && !loading ? (
           <div className="h-full flex flex-col items-center justify-center text-slate-700">
@@ -92,7 +90,7 @@ const ServiceLogsView = () => {
           </div>
         ) : (
           <div className="grid grid-cols-12 gap-4 h-full">
-            {/* List panel dito */}
+            {}
           </div>
         )}
       </div>

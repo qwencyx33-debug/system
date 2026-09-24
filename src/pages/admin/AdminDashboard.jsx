@@ -1,1485 +1,263 @@
-import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '../../supabaseClient';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Check, ClipboardList, DollarSign, Wrench, XCircle, CheckCircle, Info, AlertTriangle, UserX, Flame, CreditCard, Hourglass, ShieldAlert, ChevronRight, Edit3, Loader2, User, CheckCircle2, Star, ClipboardCheck, ShieldCheck, Users, LogOut, Sun, Moon, Zap, LayoutDashboard, Database, CalendarClock, UserX2, Sparkles } from 'lucide-react';
-import { BarChart, Bar, XAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+// eslint-disable-next-line no-unused-vars -- `motion.*` is used as a JSX namespace.
+import { AnimatePresence, motion } from 'framer-motion';
+import { Activity, AlertTriangle, BellRing, CalendarClock, CheckCircle2, ChevronRight, ClipboardCheck, Database, LayoutDashboard, LogOut, RefreshCw, ShieldCheck, Users, Wrench, X, Clock3, MapPinned, PackageCheck } from 'lucide-react';
 import UserManagement from './UserManagement';
 import TechnicianManagement from './TechnicianManagement';
 import ServiceLogs from './ServiceLogs';
 import EditAppointmentModal from './EditAppointmentModal';
 import ServiceManagement from './ServiceManagement';
 
-/* ─────────────────────────── theme ─────────────────────────── */
-/* ════════════════════════════════════════════════════════════
-   RION_CORE — Brand Token System
-   Two colors only: Navy Blue (structure) + Gold (signal).
-   Every status, priority, and semantic color below is a shade
-   or opacity of one of these two — never a third hue.
-════════════════════════════════════════════════════════════ */
+const C = { bg: '#040A14', navy: '#081226', panel: '#0E1B33', gold: '#E8B000', text: '#EAF1FB', muted: '#8CA0C0', line: 'rgba(232,176,0,.14)', green: '#22C55E', red: '#EF4444', blue: '#60A5FA', amber: '#F4CD4D' };
+const open = ['pending', 'approved', 'scheduled', 'assigned', 'in_progress'];
+const active = ['assigned', 'in_progress'];
+const terminal = ['completed', 'cancelled'];
+const day = () => new Intl.DateTimeFormat('en-CA').format(new Date());
+const nice = (s) => (s || 'unknown').replaceAll('_', ' ');
+const money = (v) => `₱${Number(v || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+const ago = (v) => { if (!v) return '—'; const m = Math.max(0, Math.floor((Date.now() - new Date(v)) / 60000)); return m < 1 ? 'just now' : m < 60 ? `${m}m ago` : m < 1440 ? `${Math.floor(m / 60)}h ago` : `${Math.floor(m / 1440)}d ago`; };
+const tone = (s) => ({ completed: C.green, in_progress: '#fb923c', assigned: C.blue, scheduled: C.blue, approved: '#a78bfa', cancelled: C.red, pending: C.amber }[s?.toLowerCase()] || C.muted);
+const dateTime = (a) => a?.schedule_date && a?.appointment_time ? new Date(`${String(a.schedule_date).slice(0, 10)}T${a.appointment_time}`) : null;
+const time = (v) => { if (!v) return 'TBD'; const [h, m] = String(v).split(':').map(Number); return new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(new Date(2000, 0, 1, h, m)); };
+const countdown = (d) => { const m = Math.max(0, Math.ceil((d - Date.now()) / 60000)); return m < 1 ? 'NOW' : m < 60 ? `IN ${m} MINUTES` : `IN ${Math.floor(m / 60)}H ${m % 60}M`; };
+function useClock() { const [now, setNow] = useState(() => new Date()); useEffect(() => { const id = setInterval(() => setNow(new Date()), 30000); return () => clearInterval(id); }, []); return now; }
 
-const GOLD        = '#E8B000';   // primary accent — action, highlight
-const GOLD_SOFT   = '#F4CD4D';   // lighter gold — hover, secondary highlight
-const GOLD_DEEP   = '#A87700';   // burnt gold — used in place of "danger red"
-
-const NAVY_DEEP   = '#040A14';   // page background
-const NAVY        = '#081226';   // sidebar / base panels
-const NAVY_PANEL  = '#0E1B33';   // card background
-const NAVY_RAISED = '#132542';   // hovered / raised surface
-const NAVY_LINE   = 'rgba(232,176,0,0.10)'; // hairline borders
-
-const TEXT        = '#EAF1FB';   // primary text
-const TEXT_DIM    = '#8CA0C0';   // secondary text / labels
-const TEXT_FAINT  = 'rgba(140,160,192,0.55)';
-
-/* Semantic mapping — all derived from gold/navy only.
-   Urgency is conveyed through saturation + motion, not hue. */
-const SEMANTIC = {
-  info:     { fg: '#5A8CDC', bg: 'rgba(90,140,220,0.14)', line: 'rgba(90,140,220,0.35)', dot: '#5A8CDC' }, // muted navy-blue, still "navy family"
-  success:  { fg: GOLD,      bg: 'rgba(232,176,0,0.12)', line: 'rgba(232,176,0,0.35)', dot: GOLD },
-  warning:  { fg: GOLD_SOFT, bg: 'rgba(244,205,77,0.10)', line: 'rgba(244,205,77,0.35)', dot: GOLD_SOFT },
-  critical: { fg: GOLD_DEEP, bg: 'rgba(168,119,0,0.16)',  line: 'rgba(168,119,0,0.45)',  dot: GOLD_DEEP },
-  neutral:  { fg: TEXT_DIM,  bg: 'rgba(140,160,192,0.08)', line: 'rgba(140,160,192,0.2)', dot: TEXT_DIM },
+const Badge = ({ children, color = C.muted }) => <span className="badge" style={{ color, borderColor: `${color}66`, background: `${color}16` }}>{children}</span>;
+const Scope = ({ data, value = false }) => {
+  const itemCount = data.itemQuantity || data.items;
+  return <span className="scope">{[`${data.areas} ${data.areas === 1 ? 'Area' : 'Areas'}`, `${itemCount} ${itemCount === 1 ? 'Item' : 'Items'}`, value && data.itemValue > 0 ? money(data.itemValue) : null].filter(Boolean).join(' · ')}</span>;
 };
+const Empty = ({ children }) => <div className="empty"><Activity size={18} />{children}</div>;
+const Panel = ({ title, action, children, className = '' }) => <motion.section className={`panel ${className}`} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .24 }}><header><h2>{title}</h2>{action}</header>{children}</motion.section>;
+const Row = ({ a, tech, data, onOpen, category }) => <motion.button layout initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} whileHover={{ x: 2 }} className="row" onClick={() => onOpen(a)}><div className="row-info"><b>{a.full_name || 'Unnamed customer'}</b><span>{a.service_type || 'Service not specified'}</span><Scope data={data} />{a.started_at && <span className="started">Started {ago(a.started_at)}</span>}</div>{category && <span className={`attention ${category.toLowerCase()}`}>{category}</span>}<span className="tech">{tech || 'Unassigned'}</span><Badge color={tone(a.status)}>{nice(a.status)}</Badge><ChevronRight size={15} /></motion.button>;
+const Kpi = ({ label, value, hint, color, icon, onClick, index }) => <motion.button initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * .06 }} whileHover={{ y: -2 }} className="kpi" style={{ '--color': color }} onClick={onClick}><span className="kpi-icon">{icon}</span><div><small>{label}</small><strong>{value}</strong><em>{hint}</em></div><ChevronRight size={16} /></motion.button>;
 
-const FONT_DISPLAY = "'Bebas Neue', sans-serif";
-const FONT_BODY    = "'DM Sans', sans-serif";
-
-const RADIUS = 14;
-const RADIUS_SM = 8;
-
-const GLASS = {
-  background: `${NAVY_PANEL}cc`,
-  border: `1px solid ${NAVY_LINE}`,
-  backdropFilter: 'blur(20px)',
-  borderRadius: RADIUS,
-};
-
-/* ─────────────────────────── helpers ─────────────────────────── */
-function timeAgo(ts) {
-  if (!ts) return '';
-  const diff = (Date.now() - new Date(ts)) / 1000;
-  if (diff < 60)    return `${Math.max(0, Math.floor(diff))}s ago`;
-  if (diff < 3600)  return `${Math.floor(diff / 60)}m ago`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-  return `${Math.floor(diff / 86400)}d ago`;
-}
-
-function isToday(ts) {
-  if (!ts) return false;
-  const d = new Date(ts);
-  const now = new Date();
-  return d.getFullYear() === now.getFullYear() &&
-    d.getMonth() === now.getMonth() &&
-    d.getDate() === now.getDate();
-}
-
-function useCountUp(target, duration = 1100, active = true) {
-  const [val, setVal] = useState(0);
-  useEffect(() => {
-    if (!active) return;
-    if (!target) { setVal(0); return; }
-    let start = null;
-    let raf;
-    const step = (ts) => {
-      if (!start) start = ts;
-      const p = Math.min((ts - start) / duration, 1);
-      setVal(Math.floor(p * target));
-      if (p < 1) raf = requestAnimationFrame(step);
-    };
-    raf = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(raf);
-  }, [target, duration, active]);
-  return val;
-}
-
-/* live clock — ticks every second, used by the Hero + top bar only (display, no data implications) */
-function useClock() {
-  const [now, setNow] = useState(new Date());
-  useEffect(() => {
-    const id = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(id);
-  }, []);
-  return now;
-}
-
-/* ─────────────────────────── StatusBadge ─────────────────────────── */
-/**
- * StatusBadge — small pill used everywhere a state needs to be named.
- * `tone` maps to the SEMANTIC token set (info | success | warning | critical | neutral).
- * `pulse` adds a live-updating dot for things that are actively changing.
- */
-const StatusBadge = ({ label, tone = 'neutral', pulse = false }) => {
-  const t = SEMANTIC[tone] || SEMANTIC.neutral;
-  return (
-    <span
-      style={{
-        display: 'inline-flex', alignItems: 'center', gap: 6,
-        padding: '4px 10px', borderRadius: 999,
-        background: t.bg, border: `1px solid ${t.line}`,
-        color: t.fg, fontFamily: FONT_BODY,
-        fontSize: 9.5, fontWeight: 800, letterSpacing: '0.14em',
-        textTransform: 'uppercase', whiteSpace: 'nowrap',
-      }}
-    >
-      {pulse && (
-        <motion.span
-          animate={{ opacity: [1, 0.35, 1] }}
-          transition={{ duration: 1.6, repeat: Infinity, ease: 'easeInOut' }}
-          style={{ width: 6, height: 6, borderRadius: '50%', background: t.dot, flexShrink: 0 }}
-        />
-      )}
-      {label}
-    </span>
-  );
-};
-
-/* ─────────────────────────── DashboardCard ─────────────────────────── */
-/**
- * DashboardCard — the single panel shell every section sits inside.
- * Keeps spacing, border, and the gold eyebrow label consistent everywhere.
- */
-const DashboardCard = ({ title, action, children, style = {}, noPad = false, delay = 0 }) => (
-  <motion.div
-    initial={{ opacity: 0, y: 14 }}
-    animate={{ opacity: 1, y: 0 }}
-    transition={{ duration: 0.45, delay, ease: [0.16, 1, 0.3, 1] }}
-    style={{ ...GLASS, padding: noPad ? 0 : '22px 20px', ...style }}
-  >
-    {title && (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18, padding: noPad ? '18px 20px 0' : 0 }}>
-        <div style={{
-          fontFamily: FONT_BODY, fontSize: 9, fontWeight: 800,
-          letterSpacing: '0.32em', textTransform: 'uppercase', color: GOLD,
-        }}>
-          {title}
-        </div>
-        {action}
-      </div>
-    )}
-    {children}
-  </motion.div>
+const sortAppointments = (records) => [...records].sort((left, right) =>
+  new Date(right.created_at || 0).getTime() - new Date(left.created_at || 0).getTime()
 );
 
-/* ─────────────────────────── StatCard ─────────────────────────── */
-/**
- * StatCard — animated executive-overview tile.
- * Pass `tone` as a hex color (always a gold or navy-blue shade upstream)
- * to theme the icon chip and top-edge highlight per metric.
- * Adds a mouse-parallax tilt on top of the existing lift/glow.
- */
-const StatCard = ({ label, value, icon, tone = GOLD, suffix = '', onClick, delay = 0 }) => {
-  const counted = useCountUp(typeof value === 'number' ? value : 0, 1100, true);
-  const ref = useRef(null);
-  const [tilt, setTilt] = useState({ x: 0, y: 0 });
-
-  const handleMouseMove = (e) => {
-    const el = ref.current;
-    if (!el) return;
-    const r = el.getBoundingClientRect();
-    const px = (e.clientX - r.left) / r.width - 0.5;
-    const py = (e.clientY - r.top) / r.height - 0.5;
-    setTilt({ x: py * -6, y: px * 8 });
-  };
-  const resetTilt = () => setTilt({ x: 0, y: 0 });
-
-  return (
-    <motion.div
-      ref={ref}
-      initial={{ opacity: 0, y: 16 }}
-      animate={{ opacity: 1, y: 0, rotateX: tilt.x, rotateY: tilt.y }}
-      transition={{ duration: 0.45, delay, ease: [0.16, 1, 0.3, 1] }}
-      whileHover={{ y: -5, boxShadow: `0 14px 34px -8px ${tone}40` }}
-      onMouseMove={handleMouseMove}
-      onMouseLeave={resetTilt}
-      onClick={onClick}
-      style={{
-        background: `${NAVY_PANEL}dd`, border: `1px solid ${NAVY_LINE}`,
-        borderRadius: RADIUS, padding: '20px 20px 18px', position: 'relative',
-        overflow: 'hidden', cursor: onClick ? 'pointer' : 'default',
-        transition: 'border-color 0.25s', transformStyle: 'preserve-3d', perspective: 800,
-      }}
-    >
-      <motion.div
-        style={{ position: 'absolute', top: 0, left: '-40%', right: 0, height: 2, width: '40%', background: `linear-gradient(90deg, transparent, ${tone}, transparent)` }}
-        animate={{ left: ['-40%', '140%'] }}
-        transition={{ duration: 3.2, repeat: Infinity, ease: 'linear', delay: delay + 0.6 }}
-      />
-      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: `linear-gradient(90deg, transparent, ${tone}, transparent)`, opacity: 0.35 }} />
-      <div style={{
-        width: 36, height: 36, borderRadius: 10, marginBottom: 16,
-        background: `${tone}18`, color: tone,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-      }}>
-        {icon}
-      </div>
-      <div style={{
-        fontFamily: FONT_BODY, fontSize: 9, fontWeight: 800, letterSpacing: '0.24em',
-        textTransform: 'uppercase', color: TEXT_DIM, marginBottom: 8,
-      }}>
-        {label}
-      </div>
-      <div style={{ fontFamily: FONT_DISPLAY, fontSize: 34, letterSpacing: '0.03em', color: TEXT, lineHeight: 1 }}>
-        {counted}{suffix}
-      </div>
-    </motion.div>
-  );
-};
-
-/* ─────────────────────────── HeroSection ─────────────────────────── */
-/**
- * HeroSection — the command-center welcome. Pure presentation: greeting,
- * live clock, and a one-line executive summary built from real `overview`
- * numbers already computed in the dashboard (no new data sources).
- */
-const HERO_PARTICLES = Array.from({ length: 14 }, (_, i) => ({
-  id: i,
-  left: (i * 37) % 100,
-  size: 2 + (i % 3),
-  duration: 6 + (i % 5) * 1.4,
-  delay: (i * 0.6) % 5,
-}));
-
-const HeroSection = ({ adminName = 'Admin', overview }) => {
+export default function AdminDashboard({ onLogout }) {
+  const [profiles, setProfiles] = useState([]), [appointments, setAppointments] = useState([]), [areas, setAreas] = useState([]), [items, setItems] = useState([]), [logs, setLogs] = useState([]);
+  const [loading, setLoading] = useState(true), [error, setError] = useState(''), [scopeWarning, setScopeWarning] = useState(false), [tab, setTab] = useState('hub'), [focus, setFocus] = useState('all'), [selected, setSelected] = useState(null), [detailsOpen, setDetailsOpen] = useState(false), [edit, setEdit] = useState(false), [confirm, setConfirm] = useState(false), [name, setName] = useState('Admin');
+  const [realtimeStatus, setRealtimeStatus] = useState('connecting');
+  const [newAppointmentCount, setNewAppointmentCount] = useState(0);
+  const [arrivalAlerts, setArrivalAlerts] = useState([]);
+  const hasInitialData = useRef(false);
+  const appointmentIds = useRef(new Set());
+  const alertTimers = useRef(new Map());
   const now = useClock();
-  const hour = now.getHours();
-  const greeting = hour < 5 ? 'Good Night' : hour < 12 ? 'Good Morning' : hour < 17 ? 'Good Afternoon' : hour < 21 ? 'Good Evening' : 'Good Night';
-
-  const dateStr = now.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
-  const timeStr = now.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-
-  const summary = overview
-    ? `${overview.activeJobs} job${overview.activeJobs === 1 ? '' : 's'} active right now, ${overview.todaysSchedule} on today's schedule${overview.waitingAssignment ? `, ${overview.waitingAssignment} awaiting a technician` : ''}.`
-    : '';
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: -18 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.65, ease: [0.16, 1, 0.3, 1] }}
-      style={{
-        position: 'relative', overflow: 'hidden', borderRadius: RADIUS,
-        border: `1px solid ${NAVY_LINE}`,
-        background: `radial-gradient(120% 160% at 15% -10%, ${GOLD}14 0%, transparent 55%), linear-gradient(135deg, ${NAVY} 0%, ${NAVY_PANEL} 55%, ${NAVY_DEEP} 100%)`,
-        padding: '34px 32px', marginBottom: 20, minHeight: 168,
-      }}
-    >
-      {/* floating gold particles */}
-      {HERO_PARTICLES.map(p => (
-        <motion.span
-          key={p.id}
-          initial={{ y: '110%', opacity: 0 }}
-          animate={{ y: '-20%', opacity: [0, 0.7, 0] }}
-          transition={{ duration: p.duration, delay: p.delay, repeat: Infinity, ease: 'easeInOut' }}
-          style={{
-            position: 'absolute', left: `${p.left}%`, bottom: 0,
-            width: p.size, height: p.size, borderRadius: '50%',
-            background: GOLD, boxShadow: `0 0 6px ${GOLD}`, pointerEvents: 'none',
-          }}
-        />
-      ))}
-
-      {/* animated light sweep */}
-      <motion.div
-        initial={{ x: '-30%' }}
-        animate={{ x: '130%' }}
-        transition={{ duration: 5.5, repeat: Infinity, repeatDelay: 3, ease: 'easeInOut' }}
-        style={{
-          position: 'absolute', top: 0, bottom: 0, width: '22%',
-          background: 'linear-gradient(100deg, transparent, rgba(232,176,0,0.06), transparent)',
-          pointerEvents: 'none',
-        }}
-      />
-
-      {/* glass reflection */}
-      <div style={{
-        position: 'absolute', top: 0, left: 0, right: 0, height: '50%',
-        background: 'linear-gradient(180deg, rgba(255,255,255,0.035), transparent)',
-        pointerEvents: 'none',
-      }} />
-
-      <div style={{ position: 'relative', zIndex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 20 }}>
-        <div>
-          <motion.div
-            initial={{ opacity: 0, x: -12 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.15, duration: 0.5 }}
-            style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}
-          >
-            <Sparkles size={13} style={{ color: GOLD }} />
-            <span style={{ fontFamily: FONT_BODY, fontSize: 9.5, fontWeight: 800, letterSpacing: '0.3em', textTransform: 'uppercase', color: GOLD_SOFT }}>
-              {dateStr}
-            </span>
-          </motion.div>
-          <motion.h1
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.22, duration: 0.5 }}
-            style={{ fontFamily: FONT_DISPLAY, fontSize: 42, letterSpacing: '0.02em', color: TEXT, margin: 0, lineHeight: 1 }}
-          >
-            {greeting}, {adminName}
-          </motion.h1>
-          {!!summary && (
-            <motion.p
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.32, duration: 0.5 }}
-              style={{ fontFamily: FONT_BODY, fontSize: 13, color: TEXT_DIM, marginTop: 10, marginBottom: 0, maxWidth: 480, lineHeight: 1.5 }}
-            >
-              {summary}
-            </motion.p>
-          )}
-        </div>
-
-        <motion.div
-          initial={{ opacity: 0, x: 12 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: 0.2, duration: 0.5 }}
-          style={{
-            textAlign: 'right', padding: '14px 20px', borderRadius: 12,
-            background: `${NAVY_DEEP}66`, border: `1px solid ${NAVY_LINE}`, backdropFilter: 'blur(10px)',
-          }}
-        >
-          <div style={{ fontFamily: FONT_DISPLAY, fontSize: 30, letterSpacing: '0.05em', color: GOLD, lineHeight: 1 }}>
-            {timeStr}
-          </div>
-          <div style={{ fontFamily: FONT_BODY, fontSize: 8.5, fontWeight: 700, letterSpacing: '0.22em', textTransform: 'uppercase', color: TEXT_FAINT, marginTop: 4 }}>
-            Local Time
-          </div>
-        </motion.div>
-      </div>
-    </motion.div>
-  );
-};
-
-/* ─────────────────────────── ProgressTracker ─────────────────────────── */
-const APPOINTMENT_STAGES = [
-  { key: 'pending',     label: 'Pending' },
-  { key: 'approved',    label: 'Approved' },
-  { key: 'scheduled',   label: 'Scheduled' },
-  { key: 'assigned',    label: 'Assigned' },
-  { key: 'in_progress', label: 'In Progress' },
-  { key: 'completed',   label: 'Completed' },
-];
-
-const ProgressTracker = ({ status }) => {
-  const idx = APPOINTMENT_STAGES.findIndex(s => s.key === status);
-  const current = Math.max(idx, 0);
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', width: '100%' }}>
-      {APPOINTMENT_STAGES.map((stage, i) => {
-        const done   = i < current;
-        const active = i === current;
-        const color  = done || active ? GOLD : TEXT_FAINT;
-        return (
-          <React.Fragment key={stage.key}>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-              <div style={{
-                width: 20, height: 20, borderRadius: '50%',
-                background: done ? 'rgba(232,176,0,0.22)' : active ? 'rgba(232,176,0,0.16)' : 'rgba(140,160,192,0.08)',
-                border: `1.5px solid ${color}`,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                transition: 'all 0.3s',
-                boxShadow: active ? `0 0 8px ${GOLD_SOFT}70` : 'none',
-              }}>
-                {done ? <Check size={10} style={{ color: GOLD }} /> :
-                  active ? <div style={{ width: 6, height: 6, borderRadius: '50%', background: GOLD }} /> :
-                  <div style={{ width: 4, height: 4, borderRadius: '50%', background: TEXT_FAINT }} />}
-              </div>
-              <span style={{ fontFamily: FONT_BODY, fontSize: 7, fontWeight: 700, letterSpacing: '0.18em', textTransform: 'uppercase', color, whiteSpace: 'nowrap' }}>
-                {stage.label}
-              </span>
-            </div>
-            {i < APPOINTMENT_STAGES.length - 1 && (
-              <div style={{ flex: 1, height: 1.5, background: done ? GOLD : 'rgba(140,160,192,0.15)', transition: 'background 0.4s', marginBottom: 14 }} />
-            )}
-          </React.Fragment>
-        );
-      })}
-    </div>
-  );
-};
-
-/* ─────────────────────────── ActivityTimeline ─────────────────────────── */
-const EVENT_META = {
-  INSERT:    { label: 'New Appointment',  icon: <ClipboardList size={12} /> },
-  paid:      { label: 'Payment Received', icon: <DollarSign   size={12} /> },
-  assigned:  { label: 'Technician Assigned', icon: <Wrench     size={12} /> },
-  cancelled: { label: 'Cancelled',        icon: <XCircle       size={12} /> },
-  completed: { label: 'Completed',        icon: <CheckCircle   size={12} /> },
-};
-
-const ActivityTimeline = ({ events }) => (
-  <div style={{ display: 'flex', flexDirection: 'column' }}>
-    {events.slice(0, 8).map((ev, i, arr) => {
-      const meta = EVENT_META[ev.event || ev.status] || EVENT_META.INSERT;
-      return (
-        <motion.div
-          key={ev.id || i}
-          initial={{ opacity: 0, x: 16 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: i * 0.05 }}
-          style={{ display: 'flex', gap: 14, position: 'relative', paddingBottom: 20 }}
-        >
-          {i < arr.length - 1 && (
-            <div style={{ position: 'absolute', left: 13, top: 28, width: 1.5, height: 'calc(100% - 10px)', background: NAVY_LINE }} />
-          )}
-          <div style={{
-            width: 28, height: 28, borderRadius: 8, flexShrink: 0,
-            background: 'rgba(232,176,0,0.14)', border: `1px solid rgba(232,176,0,0.28)`,
-            color: GOLD, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: i === 0 ? `0 0 12px rgba(232,176,0,0.35)` : 'none', zIndex: 1,
-          }}>
-            {meta.icon}
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontFamily: FONT_BODY, fontSize: 11, fontWeight: 700, color: TEXT, marginBottom: 2 }}>{meta.label}</div>
-            <div style={{ fontFamily: FONT_BODY, fontSize: 11, color: TEXT_DIM, lineHeight: 1.5 }}>
-              {ev.full_name && <span style={{ color: GOLD }}>{ev.full_name}</span>}
-              {ev.service_type && ` — ${ev.service_type}`}
-            </div>
-            <div style={{ fontFamily: FONT_BODY, fontSize: 9, fontWeight: 700, letterSpacing: '0.18em', textTransform: 'uppercase', color: TEXT_FAINT, marginTop: 4 }}>
-              {ev.created_at ? timeAgo(ev.created_at) : ''}
-            </div>
-          </div>
-        </motion.div>
-      );
-    })}
-    {events.length === 0 && (
-      <div style={{ fontFamily: FONT_BODY, fontSize: 12, color: TEXT_DIM, textAlign: 'center', padding: '24px 0' }}>
-        No activity yet — new appointments will appear here in real time.
-      </div>
-    )}
-  </div>
-);
-
-/* ─────────────────────────── PopupMessage ─────────────────────────── */
-const ICONS = {
-  success: <CheckCircle size={22} />,
-  error:   <XCircle size={22} />,
-  info:    <Info size={22} />,
-  warn:    <AlertTriangle size={22} />,
-};
-
-/**
- * usePopupCenter — drop into any component to get `notify(...)`.
- * Renders center-screen, glass, auto-dismissing confirmation popups.
- * This replaces window.alert / default browser dialogs everywhere.
- * (This is a lightweight toast for action feedback — distinct from, and
- * a replacement for, the notification bell/dropdown that has been removed.)
- *
- * Usage:
- *   const { notify, PopupCenter } = usePopupCenter();
- *   notify({ type: 'success', title: 'Payment confirmed', message: '...' });
- *   return <>{...}<PopupCenter /></>;
- */
-function usePopupCenter() {
-  const [popups, setPopups] = useState([]);
-  const idRef = useRef(0);
-
-  const dismiss = useCallback((id) => {
-    setPopups(prev => prev.filter(p => p.id !== id));
+  const load = useCallback(async ({ background = false } = {}) => {
+    if (!background) setLoading(true);
+    if (!background) setError('');
+    try {
+      const [p, a, l, ar, it] = await Promise.all([supabase.from('profiles').select('*'), supabase.from('appointments').select('*').order('created_at', { ascending: false }), supabase.from('job_logs').select('*').order('created_at', { ascending: false }).limit(8), supabase.from('appointment_areas').select('*'), supabase.from('appointment_items').select('*')]);
+      if (p.error || a.error) throw p.error || a.error;
+      setProfiles(p.data || []); setAppointments(a.data || []); appointmentIds.current = new Set((a.data || []).map((appointment) => appointment.id)); setLogs(l.data || []); setAreas(ar.data || []); setItems(it.data || []); setScopeWarning(Boolean(ar.error || it.error));
+      hasInitialData.current = true;
+    } catch (loadError) {
+      console.error('Admin dashboard refresh failed:', loadError);
+      setError("We couldn't load the latest dashboard information.");
+    } finally {
+      if (!background) setLoading(false);
+    }
   }, []);
-
-  const notify = useCallback(({ type = 'success', title, message, duration = 2600 }) => {
-    const id = ++idRef.current;
-    setPopups(prev => [...prev, { id, type, title, message }]);
-    if (duration > 0) setTimeout(() => dismiss(id), duration);
-    return id;
-  }, [dismiss]);
-
-  const PopupCenter = useCallback(() => (
-    <div style={{
-      position: 'fixed', inset: 0, pointerEvents: 'none',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      zIndex: 10000,
-    }}>
-      <AnimatePresence>
-        {popups.map(p => (
-          <motion.div
-            key={p.id}
-            initial={{ opacity: 0, scale: 0.85, y: 10 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.9, y: -8, transition: { duration: 0.2 } }}
-            transition={{ type: 'spring', stiffness: 360, damping: 26 }}
-            style={{
-              pointerEvents: 'auto', position: 'absolute',
-              background: `${NAVY_PANEL}f2`, border: `1px solid ${NAVY_LINE}`,
-              borderRadius: RADIUS, backdropFilter: 'blur(24px)',
-              boxShadow: `0 24px 70px rgba(0,0,0,0.55), 0 0 0 1px ${GOLD}14`,
-              padding: '22px 26px', minWidth: 300, maxWidth: 380,
-              display: 'flex', gap: 14, alignItems: 'flex-start',
-            }}
-          >
-            <div style={{
-              width: 40, height: 40, borderRadius: 10, flexShrink: 0,
-              background: `${GOLD}18`, color: GOLD,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}>
-              {ICONS[p.type] || ICONS.success}
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontFamily: FONT_DISPLAY, fontSize: 18, letterSpacing: '0.03em', color: TEXT, marginBottom: 3 }}>
-                {p.title}
-              </div>
-              {p.message && (
-                <div style={{ fontFamily: FONT_BODY, fontSize: 12, color: TEXT_DIM, lineHeight: 1.5 }}>
-                  {p.message}
-                </div>
-              )}
-            </div>
-            <motion.div
-              initial={{ scaleX: 1 }}
-              animate={{ scaleX: 0 }}
-              transition={{ duration: 2.6, ease: 'linear' }}
-              style={{
-                position: 'absolute', bottom: 0, left: 0, right: 0, height: 2,
-                background: GOLD, transformOrigin: 'left', borderRadius: '0 0 14px 14px', opacity: 0.6,
-              }}
-            />
-          </motion.div>
-        ))}
-      </AnimatePresence>
-    </div>
-  ), [popups]);
-
-  return { notify, PopupCenter };
-}
-
-/* ─────────────────────────── ConfirmModal ─────────────────────────── */
-/**
- * ConfirmModal — premium navy-glass confirmation dialog.
- * Used for logout, approve/reject, and any destructive or high-stakes action.
- * Controlled component: pass `open`, resolve via onConfirm / onCancel.
- */
-const ConfirmModal = ({ open, title, message, confirmLabel = 'Confirm', cancelLabel = 'Cancel', danger = false, onConfirm, onCancel }) => (
-  <AnimatePresence>
-    {open && (
-      <motion.div
-        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-        style={{
-          position: 'fixed', inset: 0, zIndex: 10001,
-          background: `${NAVY_DEEP}b3`, backdropFilter: 'blur(6px)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }}
-        onClick={onCancel}
-      >
-        <motion.div
-          initial={{ opacity: 0, scale: 0.88, y: 12 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.9, y: 8 }}
-          transition={{ type: 'spring', stiffness: 380, damping: 28 }}
-          onClick={e => e.stopPropagation()}
-          style={{
-            width: 380, background: `${NAVY_PANEL}f7`, border: `1px solid ${NAVY_LINE}`,
-            borderRadius: RADIUS, padding: '30px 28px', boxShadow: '0 30px 80px rgba(0,0,0,0.6)',
-          }}
-        >
-          <div style={{ fontFamily: FONT_DISPLAY, fontSize: 24, letterSpacing: '0.03em', color: TEXT, marginBottom: 10 }}>
-            {title}
-          </div>
-          <div style={{ fontFamily: FONT_BODY, fontSize: 13, color: TEXT_DIM, lineHeight: 1.6, marginBottom: 26 }}>
-            {message}
-          </div>
-          <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-            <motion.button
-              whileHover={{ opacity: 0.75 }} whileTap={{ scale: 0.96 }}
-              onClick={onCancel}
-              style={{
-                padding: '10px 18px', background: 'transparent', border: `1px solid ${NAVY_LINE}`,
-                borderRadius: 9, color: TEXT_DIM, fontFamily: FONT_BODY, fontSize: 11,
-                fontWeight: 800, letterSpacing: '0.14em', textTransform: 'uppercase', cursor: 'pointer',
-              }}
-            >
-              {cancelLabel}
-            </motion.button>
-            <motion.button
-              whileHover={{ y: -1, boxShadow: `0 8px 20px -6px ${GOLD}66` }} whileTap={{ scale: 0.96 }}
-              onClick={onConfirm}
-              style={{
-                padding: '10px 20px', background: danger ? 'transparent' : GOLD,
-                border: danger ? `1px solid ${GOLD}` : 'none',
-                color: danger ? GOLD : NAVY_DEEP, borderRadius: 9, fontFamily: FONT_BODY, fontSize: 11,
-                fontWeight: 800, letterSpacing: '0.14em', textTransform: 'uppercase', cursor: 'pointer',
-              }}
-            >
-              {confirmLabel}
-            </motion.button>
-          </div>
-        </motion.div>
-      </motion.div>
-    )}
-  </AnimatePresence>
-);
-
-/* ─────────────────────────── LogoutOverlay ─────────────────────────── */
-/**
- * LogoutOverlay — the final beat of the "closing a premium desktop app" flow.
- * Fades the whole screen to navy with a centered mark + spinner, then the
- * caller swaps in the login screen once `onDone` fires. Pure presentation —
- * the actual supabase.auth.signOut() call happens in the dashboard.
- */
-const LogoutOverlay = ({ open, onDone }) => {
+  useEffect(() => { load(); supabase.auth.getUser().then(({ data }) => { const u = data?.user, n = u?.user_metadata?.full_name || u?.user_metadata?.name || u?.email?.split('@')[0]; if (n) setName(n); }); }, [load]);
+  const dismissArrivalAlert = useCallback((id) => {
+    const timer = alertTimers.current.get(id);
+    if (timer) clearTimeout(timer);
+    alertTimers.current.delete(id);
+    setArrivalAlerts((current) => current.filter((alert) => alert.id !== id));
+  }, []);
+  const showArrivalAlert = useCallback((appointment) => {
+    const id = `${appointment.id}-${Date.now()}`;
+    setArrivalAlerts((current) => [...current.slice(-2), { id, appointment }]);
+    alertTimers.current.set(id, setTimeout(() => dismissArrivalAlert(id), 7000));
+  }, [dismissArrivalAlert]);
   useEffect(() => {
-    if (!open) return;
-    const t = setTimeout(() => onDone?.(), 1400);
-    return () => clearTimeout(t);
-  }, [open, onDone]);
-
-  return (
-    <AnimatePresence>
-      {open && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.5 }}
-          style={{
-            position: 'fixed', inset: 0, zIndex: 10002,
-            background: NAVY_DEEP,
-            display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 18,
-          }}
-        >
-          <motion.div
-            initial={{ opacity: 0, scale: 0.7 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.15, type: 'spring', stiffness: 260, damping: 20 }}
-            style={{
-              width: 52, height: 52, borderRadius: 14, background: GOLD,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: NAVY_DEEP, boxShadow: `0 0 30px ${GOLD}55`,
-            }}
-          >
-            <ShieldCheck size={24} />
-          </motion.div>
-          <Loader2 size={20} className="adm-spin" style={{ color: GOLD }} />
-          <motion.div
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}
-            style={{ fontFamily: FONT_BODY, fontSize: 10, fontWeight: 800, letterSpacing: '0.32em', textTransform: 'uppercase', color: TEXT_DIM }}
-          >
-            Ending Session
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
-  );
-};
-
-/* ─────────────────────────── UrgentActionCenter ─────────────────────────── */
-/**
- * UrgentActionCenter — surfaces everything that needs a human decision right now.
- * Built entirely from `appointments` + `qc_reports`, no new tables.
- *
- * Field assumptions (adjust to match your exact column names):
- *  appointments.technician_id, appointments.priority ('high' | 'normal'),
- *  appointments.payment_status, appointments.status
- *  qc_reports.status ('flagged' | 'failed' | ...), qc_reports.appointment_id
- */
-const Row = ({ icon, title, subtitle, onClick, delay }) => (
-  <motion.div
-    initial={{ opacity: 0, x: -10 }}
-    animate={{ opacity: 1, x: 0 }}
-    transition={{ delay }}
-    whileHover={{ x: 3 }}
-    onClick={onClick}
-    style={{
-      display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px',
-      background: 'rgba(232,176,0,0.05)', border: `1px solid ${NAVY_LINE}`,
-      borderRadius: 10, cursor: onClick ? 'pointer' : 'default', marginBottom: 8,
-    }}
-  >
-    <motion.div
-      animate={{ opacity: [1, 0.55, 1] }}
-      transition={{ duration: 1.8, repeat: Infinity }}
-      style={{
-        width: 30, height: 30, borderRadius: 8, flexShrink: 0,
-        background: `${GOLD_DEEP}22`, color: GOLD_DEEP,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-      }}
-    >
-      {icon}
-    </motion.div>
-    <div style={{ flex: 1, minWidth: 0 }}>
-      <div style={{ fontFamily: FONT_BODY, fontSize: 12.5, fontWeight: 700, color: TEXT }}>{title}</div>
-      <div style={{ fontFamily: FONT_BODY, fontSize: 11, color: TEXT_DIM }}>{subtitle}</div>
-    </div>
-    <ChevronRight size={15} style={{ color: TEXT_DIM, flexShrink: 0 }} />
-  </motion.div>
-);
-
-const Group = ({ icon, label, count, children, delay }) => {
-  if (count === 0) return null;
-  return (
-    <div style={{ marginBottom: 18 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-        <span style={{ color: GOLD, display: 'flex' }}>{icon}</span>
-        <span style={{ fontFamily: FONT_BODY, fontSize: 10, fontWeight: 800, letterSpacing: '0.18em', textTransform: 'uppercase', color: TEXT }}>{label}</span>
-        <span style={{
-          background: GOLD, color: '#040A14', fontSize: 10, fontWeight: 800,
-          padding: '1px 8px', borderRadius: 999, marginLeft: 2,
-        }}>{count}</span>
-      </div>
-      {children}
-    </div>
-  );
-};
-
-const UrgentActionCenter = ({ appointments = [], qcReports = [], onSelect }) => {
-  const buckets = useMemo(() => {
-    const unassigned = appointments.filter(a =>
-      !a.technician_id && ['pending', 'approved', 'scheduled'].includes(a.status));
-    const highPriority = appointments.filter(a =>
-      (a.priority === 'high' || a.priority === 'urgent') && a.status !== 'completed' && a.status !== 'cancelled');
-    const pendingPayment = appointments.filter(a =>
-      a.payment_status === 'pending' && a.status === 'completed');
-    const waitingApproval = appointments.filter(a => a.status === 'pending');
-    const qcIssues = qcReports.filter(q => ['flagged', 'failed', 'issue'].includes((q.status || '').toLowerCase()));
-    return { unassigned, highPriority, pendingPayment, waitingApproval, qcIssues };
-  }, [appointments, qcReports]);
-
-  const total = buckets.unassigned.length + buckets.highPriority.length +
-    buckets.pendingPayment.length + buckets.waitingApproval.length + buckets.qcIssues.length;
-
-  return (
-    <DashboardCard title="Needs Attention" delay={0.05}
-      action={total > 0 ? (
-        <span style={{ fontFamily: FONT_BODY, fontSize: 9, fontWeight: 800, color: GOLD_DEEP, letterSpacing: '0.14em', textTransform: 'uppercase' }}>
-          {total} open
-        </span>
-      ) : null}
-    >
-      {total === 0 ? (
-        <div style={{ fontFamily: FONT_BODY, fontSize: 12, color: TEXT_DIM, textAlign: 'center', padding: '20px 0' }}>
-          Nothing urgent — all clear.
-        </div>
-      ) : (
-        <>
-          <Group icon={<UserX size={13} />} label="No Technician Assigned" count={buckets.unassigned.length} delay={0.06}>
-            {buckets.unassigned.slice(0, 4).map((a, i) => (
-              <Row key={a.id} icon={<UserX size={14} />} title={a.full_name} subtitle={a.service_type}
-                onClick={() => onSelect?.(a)} delay={0.06 + i * 0.03} />
-            ))}
-          </Group>
-          <Group icon={<Flame size={13} />} label="High Priority" count={buckets.highPriority.length} delay={0.08}>
-            {buckets.highPriority.slice(0, 4).map((a, i) => (
-              <Row key={a.id} icon={<Flame size={14} />} title={a.full_name} subtitle={a.service_type}
-                onClick={() => onSelect?.(a)} delay={0.08 + i * 0.03} />
-            ))}
-          </Group>
-          <Group icon={<CreditCard size={13} />} label="Pending Payments" count={buckets.pendingPayment.length} delay={0.1}>
-            {buckets.pendingPayment.slice(0, 4).map((a, i) => (
-              <Row key={a.id} icon={<CreditCard size={14} />} title={a.full_name} subtitle={a.service_type}
-                onClick={() => onSelect?.(a)} delay={0.1 + i * 0.03} />
-            ))}
-          </Group>
-          <Group icon={<Hourglass size={13} />} label="Waiting Approval" count={buckets.waitingApproval.length} delay={0.12}>
-            {buckets.waitingApproval.slice(0, 4).map((a, i) => (
-              <Row key={a.id} icon={<Hourglass size={14} />} title={a.full_name} subtitle={a.service_type}
-                onClick={() => onSelect?.(a)} delay={0.12 + i * 0.03} />
-            ))}
-          </Group>
-          <Group icon={<ShieldAlert size={13} />} label="QC Issues" count={buckets.qcIssues.length} delay={0.14}>
-            {buckets.qcIssues.slice(0, 4).map((q, i) => (
-              <Row key={q.id} icon={<ShieldAlert size={14} />} title={q.full_name || `Report #${q.id}`} subtitle={q.notes || q.status}
-                delay={0.14 + i * 0.03} />
-            ))}
-          </Group>
-        </>
-      )}
-    </DashboardCard>
-  );
-};
-
-/* ─────────────────────────── LiveOperationsPanel ─────────────────────────── */
-const PRIORITY_TONE = { high: 'critical', urgent: 'critical', normal: 'neutral', low: 'neutral' };
-
-/**
- * LiveOperationsPanel — Customer / Service / Technician / Schedule / Status / Priority
- * Sourced from `appointments`, joined against `profiles` for technician name.
- */
-const LiveOperationsPanel = ({ appointments = [], techniciansById = {}, loading, onEdit, onApprove, onReject }) => (
-  <DashboardCard title="Live Operations" delay={0.1}>
-    {loading ? (
-      <div style={{ display: 'flex', justifyContent: 'center', padding: '40px 0' }}>
-        <Loader2 size={22} style={{ color: GOLD }} className="adm-spin" />
-      </div>
-    ) : appointments.length === 0 ? (
-      <div style={{ fontFamily: FONT_BODY, fontSize: 12, color: TEXT_DIM, textAlign: 'center', padding: '30px 0' }}>
-        No live appointments right now.
-      </div>
-    ) : (
-      <div style={{ display: 'flex', flexDirection: 'column' }}>
-        {appointments.map((apt, i) => {
-          const tech = apt.technician_id ? techniciansById[apt.technician_id] : null;
-          return (
-            <motion.div
-              key={apt.id}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              whileHover={{ backgroundColor: 'rgba(232,176,0,0.03)' }}
-              transition={{ delay: i * 0.04 }}
-              style={{ padding: '16px 4px', borderBottom: `1px solid ${NAVY_LINE}`, borderRadius: 8 }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12, gap: 12, flexWrap: 'wrap' }}>
-                <div style={{ minWidth: 160 }}>
-                  <div style={{ fontFamily: FONT_BODY, fontSize: 13, fontWeight: 700, color: TEXT, marginBottom: 2 }}>{apt.full_name}</div>
-                  <div style={{ fontFamily: FONT_BODY, fontSize: 11, color: TEXT_DIM }}>{apt.service_type}</div>
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 130 }}>
-                  <User size={13} style={{ color: tech ? GOLD : TEXT_DIM }} />
-                  <span style={{ fontFamily: FONT_BODY, fontSize: 11, color: tech ? TEXT : TEXT_DIM }}>
-                    {tech ? tech.full_name : 'Unassigned'}
-                  </span>
-                </div>
-
-                {apt.priority && (apt.priority === 'high' || apt.priority === 'urgent') && (
-                  <StatusBadge label={apt.priority} tone="critical" pulse />
-                )}
-
-                <div style={{ display: 'flex', gap: 6, marginLeft: 'auto' }}>
-                  <motion.button whileHover={{ scale: 1.08 }} whileTap={{ scale: 0.94 }} onClick={() => onEdit(apt)}
-                    style={{ width: 28, height: 28, borderRadius: 8, background: 'rgba(232,176,0,0.08)', border: '1px solid rgba(232,176,0,0.2)', color: GOLD, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <Edit3 size={13} />
-                  </motion.button>
-                  {apt.status === 'pending' && (<>
-                    <motion.button whileHover={{ scale: 1.08 }} whileTap={{ scale: 0.94 }} onClick={() => onApprove(apt)}
-                      style={{ width: 28, height: 28, borderRadius: 8, background: 'rgba(232,176,0,0.14)', border: '1px solid rgba(232,176,0,0.3)', color: GOLD, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <CheckCircle size={13} />
-                    </motion.button>
-                    <motion.button whileHover={{ scale: 1.08 }} whileTap={{ scale: 0.94 }} onClick={() => onReject(apt)}
-                      style={{ width: 28, height: 28, borderRadius: 8, background: 'rgba(140,160,192,0.08)', border: `1px solid ${NAVY_LINE}`, color: TEXT_DIM, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <XCircle size={13} />
-                    </motion.button>
-                  </>)}
-                </div>
-              </div>
-              <ProgressTracker status={apt.status} />
-            </motion.div>
-          );
-        })}
-      </div>
-    )}
-  </DashboardCard>
-);
-
-/* ─────────────────────────── ServiceAnalytics ─────────────────────────── */
-/**
- * ServiceAnalytics — most requested services + completed vs pending, from `appointments`.
- * Bars alternate gold / soft-gold only — no third color introduced.
- * A hovered bar reveals its exact share of the total (from existing data only).
- */
-const ServiceAnalytics = ({ appointments = [] }) => {
-  const [hovered, setHovered] = useState(null);
-
-  const chartData = useMemo(() => {
-    const counts = appointments.reduce((acc, a) => {
-      const key = (a.service_type || 'Other').split(' ')[0];
-      acc[key] = (acc[key] || 0) + 1;
-      return acc;
-    }, {});
-    return Object.entries(counts).map(([name, value]) => ({ name, value }))
-      .sort((a, b) => b.value - a.value).slice(0, 8);
-  }, [appointments]);
-
-  const totalJobs = chartData.reduce((s, d) => s + d.value, 0) || 1;
-  const completed = appointments.filter(a => a.status === 'completed').length;
-  const pending = appointments.filter(a => !['completed', 'cancelled'].includes(a.status)).length;
-  const total = completed + pending || 1;
-
-  return (
-    <DashboardCard title="Service Analytics" delay={0.06}>
-      <div style={{ height: 200, marginBottom: 8, position: 'relative' }}>
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={chartData} barCategoryGap="38%" onMouseLeave={() => setHovered(null)}>
-            <XAxis dataKey="name" stroke={TEXT_DIM} axisLine={false} tickLine={false} tick={{ fontSize: 9, fontWeight: 700, fill: TEXT_DIM }} />
-            <Tooltip
-              cursor={{ fill: 'rgba(232,176,0,0.05)' }}
-              contentStyle={{ background: NAVY_PANEL, border: `1px solid ${NAVY_LINE}`, borderRadius: 8, color: TEXT, fontSize: 11 }}
-              formatter={(value) => [`${value} job${value === 1 ? '' : 's'} · ${Math.round((value / totalJobs) * 100)}%`, 'Requests']}
-            />
-            <Bar dataKey="value" radius={[4, 4, 0, 0]} barSize={26} onMouseEnter={(_, i) => setHovered(i)}>
-              {chartData.map((_, i) => (
-                <Cell
-                  key={i}
-                  fill={i % 2 === 0 ? GOLD : GOLD_SOFT}
-                  fillOpacity={hovered === null ? (i % 2 === 0 ? 1 : 0.7) : hovered === i ? 1 : 0.35}
-                />
-              ))}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-
-      <div style={{ marginTop: 12 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: FONT_BODY, fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: TEXT_DIM, marginBottom: 8 }}>
-          <span>Completed vs Open</span>
-          <span style={{ color: GOLD }}>{Math.round((completed / total) * 100)}% complete</span>
-        </div>
-        <div style={{ height: 8, borderRadius: 999, background: 'rgba(140,160,192,0.12)', overflow: 'hidden', display: 'flex' }}>
-          <motion.div
-            initial={{ width: 0 }}
-            animate={{ width: `${(completed / total) * 100}%` }}
-            transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
-            style={{ background: GOLD }}
-          />
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontFamily: FONT_BODY, fontSize: 10.5, color: TEXT_DIM }}>
-          <span>{completed} completed</span>
-          <span>{pending} open</span>
-        </div>
-      </div>
-    </DashboardCard>
-  );
-};
-
-/* ─────────────────────────── TechnicianPerformance ─────────────────────────── */
-/**
- * TechnicianPerformance — built from `profiles` (role='technician') + `appointments`.
- * "Active" = has at least one appointment currently in progress/assigned.
- * Workload = open (non-completed, non-cancelled) jobs currently assigned to them.
- */
-const TechnicianPerformance = ({ technicians = [], appointments = [] }) => {
-  const rows = useMemo(() => {
-    return technicians.map(t => {
-      const mine = appointments.filter(a => a.technician_id === t.id);
-      const open = mine.filter(a => !['completed', 'cancelled'].includes(a.status));
-      const completed = mine.filter(a => a.status === 'completed');
-      const active = mine.some(a => ['assigned', 'in_progress'].includes(a.status));
-      return { ...t, open: open.length, completed: completed.length, active };
-    }).sort((a, b) => b.open - a.open);
-  }, [technicians, appointments]);
-
-  const activeCount = rows.filter(r => r.active).length;
-
-  return (
-    <DashboardCard
-      title="Field Force"
-      delay={0.18}
-      action={
-        <span style={{ fontFamily: FONT_BODY, fontSize: 9, fontWeight: 800, color: GOLD, letterSpacing: '0.14em', textTransform: 'uppercase' }}>
-          {activeCount} active
-        </span>
-      }
-    >
-      {rows.length === 0 ? (
-        <div style={{ fontFamily: FONT_BODY, fontSize: 12, color: TEXT_DIM, textAlign: 'center', padding: '20px 0' }}>
-          No technicians on record.
-        </div>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column' }}>
-          {rows.map((t, i) => (
-            <motion.div
-              key={t.id}
-              initial={{ opacity: 0, x: 12 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: i * 0.04 }}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 12, padding: '11px 0',
-                borderBottom: `1px solid ${NAVY_LINE}`,
-              }}
-            >
-              <div style={{
-                width: 32, height: 32, borderRadius: 9, flexShrink: 0,
-                background: t.active ? 'rgba(232,176,0,0.16)' : 'rgba(140,160,192,0.08)',
-                color: t.active ? GOLD : TEXT_DIM,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}>
-                <Wrench size={14} />
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontFamily: FONT_BODY, fontSize: 12.5, fontWeight: 700, color: TEXT }}>{t.full_name}</div>
-                <div style={{ fontFamily: FONT_BODY, fontSize: 10.5, color: TEXT_DIM, display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <CheckCircle2 size={11} /> {t.completed} completed
-                </div>
-              </div>
-              <StatusBadge
-                label={t.active ? `${t.open} on job` : t.open > 0 ? `${t.open} queued` : 'Available'}
-                tone={t.active ? 'warning' : t.open > 0 ? 'neutral' : 'success'}
-                pulse={t.active}
-              />
-            </motion.div>
-          ))}
-        </div>
-      )}
-    </DashboardCard>
-  );
-};
-
-/* ─────────────────────────── CustomerExperience ─────────────────────────── */
-/**
- * CustomerExperience — sourced from `service_reports`.
- * Assumes optional `rating` (number) and `feedback` (text) columns on service_reports.
- * If your table uses different column names, update RATING_FIELD / FEEDBACK_FIELD below.
- * If neither field is present on any row, this renders an honest empty state
- * rather than fabricating a score — per the "no fake data" rule.
- */
-const RATING_FIELD = 'rating';
-const FEEDBACK_FIELD = 'feedback';
-
-const Stars = ({ value }) => (
-  <div style={{ display: 'flex', gap: 2 }}>
-    {[1, 2, 3, 4, 5].map(n => (
-      <Star key={n} size={12} fill={n <= Math.round(value) ? GOLD : 'transparent'} color={GOLD} strokeWidth={1.5} />
-    ))}
-  </div>
-);
-
-const CustomerExperience = ({ serviceReports = [] }) => {
-  const rated = serviceReports.filter(r => typeof r[RATING_FIELD] === 'number');
-  const avg = useMemo(() => {
-    if (!rated.length) return null;
-    return rated.reduce((s, r) => s + r[RATING_FIELD], 0) / rated.length;
-  }, [rated]);
-
-  const recent = serviceReports
-    .filter(r => r[FEEDBACK_FIELD])
-    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-    .slice(0, 4);
-
-  return (
-    <DashboardCard title="Customer Experience" delay={0.22}>
-      {avg === null ? (
-        <div style={{ fontFamily: FONT_BODY, fontSize: 12, color: TEXT_DIM, textAlign: 'center', padding: '20px 0' }}>
-          No customer ratings recorded yet.
-        </div>
-      ) : (
-        <>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 6 }}>
-            <span style={{ fontFamily: FONT_DISPLAY, fontSize: 34, color: TEXT }}>{avg.toFixed(1)}</span>
-            <Stars value={avg} />
-          </div>
-          <div style={{ fontFamily: FONT_BODY, fontSize: 10.5, color: TEXT_DIM, letterSpacing: '0.08em', marginBottom: 18 }}>
-            from {rated.length} rated {rated.length === 1 ? 'service' : 'services'}
-          </div>
-          {recent.map((r, i) => (
-            <motion.div
-              key={r.id || i}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.05 }}
-              style={{ padding: '10px 0', borderTop: `1px solid ${NAVY_LINE}` }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                {typeof r[RATING_FIELD] === 'number' && <Stars value={r[RATING_FIELD]} />}
-                <span style={{ fontFamily: FONT_BODY, fontSize: 9.5, color: TEXT_DIM }}>{timeAgo(r.created_at)}</span>
-              </div>
-              <div style={{ fontFamily: FONT_BODY, fontSize: 11.5, color: TEXT, lineHeight: 1.5 }}>{r[FEEDBACK_FIELD]}</div>
-            </motion.div>
-          ))}
-        </>
-      )}
-    </DashboardCard>
-  );
-};
-
-/* ─────────────────────────── QualityControlCenter ─────────────────────────── */
-/**
- * QualityControlCenter — sourced from `qc_reports`.
- * Assumes a `status` column with values like 'pending' | 'approved' | 'flagged' | 'failed'.
- */
-const STATUS_TONE = { pending: 'warning', approved: 'success', flagged: 'critical', failed: 'critical' };
-
-const QualityControlCenter = ({ qcReports = [] }) => {
-  const { pending, approved, issues } = useMemo(() => ({
-    pending: qcReports.filter(q => (q.status || '').toLowerCase() === 'pending'),
-    approved: qcReports.filter(q => (q.status || '').toLowerCase() === 'approved'),
-    issues: qcReports.filter(q => ['flagged', 'failed'].includes((q.status || '').toLowerCase())),
-  }), [qcReports]);
-
-  const recent = [...qcReports].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 6);
-
-  return (
-    <DashboardCard title="Quality Control" delay={0.26}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, marginBottom: 18 }}>
-        {[
-          { label: 'Pending', count: pending.length, icon: <ClipboardCheck size={14} /> },
-          { label: 'Approved', count: approved.length, icon: <ShieldCheck size={14} /> },
-          { label: 'Issues', count: issues.length, icon: <ShieldAlert size={14} /> },
-        ].map((s) => (
-          <motion.div key={s.label} whileHover={{ y: -2 }} style={{ textAlign: 'center', padding: '12px 6px', borderRadius: 10, background: 'rgba(232,176,0,0.05)', border: `1px solid ${NAVY_LINE}` }}>
-            <div style={{ display: 'flex', justifyContent: 'center', color: GOLD, marginBottom: 6 }}>{s.icon}</div>
-            <div style={{ fontFamily: FONT_BODY, fontSize: 18, fontWeight: 800, color: TEXT }}>{s.count}</div>
-            <div style={{ fontFamily: FONT_BODY, fontSize: 8.5, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', color: TEXT_DIM }}>{s.label}</div>
-          </motion.div>
-        ))}
-      </div>
-
-      {recent.length === 0 ? (
-        <div style={{ fontFamily: FONT_BODY, fontSize: 12, color: TEXT_DIM, textAlign: 'center', padding: '10px 0' }}>
-          No QC reports on file yet.
-        </div>
-      ) : recent.map((q, i) => (
-        <motion.div
-          key={q.id}
-          initial={{ opacity: 0, y: 6 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: i * 0.04 }}
-          style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '9px 0', borderBottom: `1px solid ${NAVY_LINE}` }}
-        >
-          <div>
-            <div style={{ fontFamily: FONT_BODY, fontSize: 12, fontWeight: 700, color: TEXT }}>{q.full_name || `Report #${q.id}`}</div>
-            <div style={{ fontFamily: FONT_BODY, fontSize: 10, color: TEXT_DIM }}>{timeAgo(q.created_at)}</div>
-          </div>
-          <StatusBadge label={q.status || 'unknown'} tone={STATUS_TONE[(q.status || '').toLowerCase()] || 'neutral'} />
-        </motion.div>
-      ))}
-    </DashboardCard>
-  );
-};
-
-/* ─── sidebar nav item ─── */
-const NavItem = ({ icon, label, active, onClick, badge }) => (
-  <div
-    onClick={onClick}
-    style={{
-      display: 'flex', alignItems: 'center', gap: 14,
-      padding: '12px 16px', margin: '0 8px', borderRadius: 10, cursor: 'pointer',
-      background: active ? GOLD : 'transparent',
-      color: active ? NAVY_DEEP : TEXT_DIM,
-      transition: 'all 0.2s', position: 'relative',
-    }}
-    onMouseEnter={e => { if (!active) { e.currentTarget.style.background = 'rgba(232,176,0,0.07)'; e.currentTarget.style.color = TEXT; } }}
-    onMouseLeave={e => { if (!active) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = TEXT_DIM; } }}
-  >
-    <span style={{ flexShrink: 0, display: 'flex' }}>{icon}</span>
-    <span style={{ fontFamily: FONT_BODY, fontSize: 10, fontWeight: 800, letterSpacing: '0.22em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
-      {label}
-    </span>
-    {!!badge && badge > 0 && (
-      <span style={{
-        marginLeft: 'auto', background: active ? NAVY_DEEP : GOLD,
-        color: active ? GOLD : NAVY_DEEP, borderRadius: 999,
-        fontSize: 9, fontWeight: 800, padding: '1px 7px', minWidth: 18, textAlign: 'center',
-      }}>
-        {badge}
-      </span>
-    )}
-  </div>
-);
-
-/* ══════════════════════════════════════════
-   MAIN DASHBOARD
-══════════════════════════════════════════ */
-const AdminDashboard = ({ onLogout }) => {
-  const [profiles,      setProfiles]      = useState([]);
-  const [appointments,  setAppointments]  = useState([]);
-  const [qcReports,     setQcReports]     = useState([]);
-  const [serviceReports,setServiceReports]= useState([]);
-  const [timeline,      setTimeline]      = useState([]);
-  const [loading,       setLoading]       = useState(true);
-  const [isDark,        setIsDark]        = useState(true);
-  const [activeTab,     setActiveTab]     = useState('hub');
-  const [selectedApt,   setSelectedApt]   = useState(null);
-  const [isEditOpen,    setIsEditOpen]    = useState(false);
-  const [logoutConfirm, setLogoutConfirm] = useState(false);
-  const [loggingOut,    setLoggingOut]    = useState(false);
-  const [actionConfirm, setActionConfirm] = useState(null); // { apt, kind: 'approve' | 'reject' }
-  const [adminName,     setAdminName]     = useState('Admin');
-
-  const { notify, PopupCenter } = usePopupCenter();
-
-  /* ─── data loading ─── */
-  const loadAll = async () => {
-    setLoading(true);
-    await Promise.all([fetchProfiles(), fetchAppointments(), fetchQc(), fetchServiceReports(), fetchTimeline()]);
-    setLoading(false);
-  };
-
-  const fetchProfiles = async () => {
-    const { data } = await supabase.from('profiles').select('*');
-    setProfiles(data || []);
-  };
-
-  const fetchAppointments = async () => {
-    const { data } = await supabase.from('appointments').select('*').order('created_at', { ascending: false });
-    setAppointments(data || []);
-  };
-
-  const fetchQc = async () => {
-    const { data } = await supabase.from('qc_reports').select('*').order('created_at', { ascending: false });
-    setQcReports(data || []);
-  };
-
-  const fetchServiceReports = async () => {
-    const { data } = await supabase.from('service_reports').select('*').order('created_at', { ascending: false });
-    setServiceReports(data || []);
-  };
-
-  const fetchTimeline = async () => {
-    const { data } = await supabase.from('appointments').select('*').order('created_at', { ascending: false }).limit(10);
-    setTimeline(data || []);
-  };
-
-  useEffect(() => {
-    const saved = localStorage.getItem('theme') || 'dark';
-    setIsDark(saved === 'dark');
-    loadAll();
-
-    // pull the signed-in admin's display name from the auth session (no schema change)
-    supabase.auth.getUser().then(({ data }) => {
-      const u = data?.user;
-      const name = u?.user_metadata?.full_name || u?.user_metadata?.name || u?.email?.split('@')[0];
-      if (name) setAdminName(name);
-    });
-
-    const ch = supabase.channel('admin-live')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments' }, (payload) => {
-        loadAll();
-        if (payload.eventType === 'INSERT') {
-          notify({ type: 'success', title: 'New service request received', message: `${payload.new.full_name} · ${payload.new.service_type}` });
-        } else if (payload.eventType === 'UPDATE') {
-          const s = payload.new.status;
-          if (s === 'completed' && payload.old.status !== 'completed') {
-            notify({ type: 'success', title: 'Job completed successfully', message: payload.new.full_name });
-          }
-          if (payload.new.technician_id && !payload.old.technician_id) {
-            notify({ type: 'success', title: 'Technician successfully assigned', message: payload.new.full_name });
-          }
-          if (payload.new.payment_status === 'paid' && payload.old.payment_status !== 'paid') {
-            notify({ type: 'success', title: 'Payment confirmed', message: payload.new.full_name });
-          }
+    const timers = alertTimers.current;
+    const upsert = (record) => {
+      appointmentIds.current.add(record.id);
+      setAppointments((current) => sortAppointments([record, ...current.filter((appointment) => appointment.id !== record.id)]));
+    };
+    const channel = supabase.channel('admin-appointments-monitor')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'appointments' }, (payload) => {
+        const record = payload.new;
+        if (!record?.id) return;
+        const isNew = !appointmentIds.current.has(record.id);
+        upsert(record);
+        if (hasInitialData.current && isNew) {
+          setNewAppointmentCount((count) => count + 1);
+          showArrivalAlert(record);
         }
       })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, loadAll)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'qc_reports' }, loadAll)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'service_reports' }, loadAll)
-      .subscribe();
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'appointments' }, (payload) => {
+        if (payload.new?.id) upsert(payload.new);
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'appointments' }, (payload) => {
+        if (payload.old?.id) {
+          appointmentIds.current.delete(payload.old.id);
+          setAppointments((current) => current.filter((appointment) => appointment.id !== payload.old.id));
+        }
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'job_logs' }, () => load({ background: true }))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'appointment_areas' }, () => load({ background: true }))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'appointment_items' }, () => load({ background: true }))
+      .subscribe((status) => {
+        setRealtimeStatus(status === 'SUBSCRIBED' ? 'live' : status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED' ? 'offline' : 'connecting');
+      });
+    const fallback = setInterval(() => load({ background: true }), 60000);
+    return () => {
+      clearInterval(fallback);
+      timers.forEach(clearTimeout);
+      timers.clear();
+      supabase.removeChannel(channel);
+    };
+  }, [load, showArrivalAlert]);
+  const techs = useMemo(() => profiles.filter((p) => p.role === 'technician'), [profiles]);
+  const techName = useMemo(() => Object.fromEntries(techs.map((t) => [t.id, `${t.first_name || ''} ${t.last_name || ''}`.trim() || t.email])), [techs]);
+  const workload = useMemo(() => { const result = {}; appointments.forEach((a) => { result[a.id] = { areas: 0, areaQuantity: 0, items: 0, itemQuantity: 0, itemValue: 0, areaNames: [], itemDetails: [] }; }); areas.forEach((a) => { const x = result[a.appointment_id]; if (x) { x.areas += 1; x.areaQuantity += Number(a.quantity || 0); if (a.area_name) x.areaNames.push(a.area_name); } }); items.forEach((i) => { const x = result[i.appointment_id]; if (x) { const q = Number(i.quantity || 0); x.items += 1; x.itemQuantity += q; x.itemValue += Number(i.total_price || 0); x.itemDetails.push({ name: i.item_name || 'Unnamed item', quantity: q }); } }); return result; }, [appointments, areas, items]);
+  const getScope = useCallback((a) => workload[a?.id] || { areas: 0, areaQuantity: 0, items: 0, itemQuantity: 0, itemValue: 0, areaNames: [], itemDetails: [] }, [workload]);
+  const today = useMemo(() => appointments.filter((a) => String(a.schedule_date || '').slice(0, 10) === day()).sort((a, b) => (a.appointment_time || '99:99').localeCompare(b.appointment_time || '99:99')), [appointments]);
+  const activeJobs = useMemo(() => appointments.filter((a) => active.includes(a.status?.toLowerCase())), [appointments]);
+  const unassigned = useMemo(() => appointments.filter((a) => !a.technician_id && open.includes(a.status?.toLowerCase())), [appointments]);
+  const payments = useMemo(() => appointments.filter((a) => a.payment_status?.toLowerCase() === 'pending' && a.status?.toLowerCase() !== 'cancelled'), [appointments]);
+  const priority = useMemo(() => appointments.filter((a) => ['high', 'urgent'].includes(a.priority?.toLowerCase()) && !terminal.includes(a.status?.toLowerCase())), [appointments]);
+  const completed = useMemo(() => appointments.filter((a) => a.status?.toLowerCase() === 'completed'), [appointments]);
+  const needs = useMemo(() => { const seen = new Set(); return [...unassigned, ...payments, ...priority].filter((a) => !seen.has(a.id) && seen.add(a.id)); }, [unassigned, payments, priority]);
+  const list = focus === 'all' ? needs : ({ unassigned, payments, priority, active: activeJobs, today }[focus] || needs);
+  const nextUp = useMemo(() => appointments.filter((a) => !terminal.includes(a.status?.toLowerCase())).map((a) => ({ a, at: dateTime(a) })).filter(({ at }) => at && at >= now).sort((x, y) => x.at - y.at)[0], [appointments, now]);
+  const busy = new Set(activeJobs.map((a) => a.technician_id).filter(Boolean));
+  const working = appointments.filter((a) => a.status?.toLowerCase() === 'in_progress').map((a) => a.technician_id).filter(Boolean);
+  const techLoad = useMemo(() => techs.map((tech) => ({ tech, jobs: activeJobs.filter((a) => a.technician_id === tech.id).length })).sort((a, b) => b.jobs - a.jobs), [techs, activeJobs]);
+  const maxLoad = Math.max(1, ...techLoad.map((x) => x.jobs));
+  const openA = (a) => { setSelected({ ...a, workload: getScope(a) }); setDetailsOpen(true); };
+  const category = (a) => !a.technician_id ? 'Unassigned' : a.payment_status?.toLowerCase() === 'pending' ? 'Payment' : ['high', 'urgent'].includes(a.priority?.toLowerCase()) ? 'Priority' : '';
+  const nav = [['hub', 'Overview', <LayoutDashboard size={16} />], ['logs', 'Appointments', <ClipboardCheck size={16} />], ['services', 'Services', <Database size={16} />], ['users', 'Personnel', <Users size={16} />], ['techs', 'Field Force', <Wrench size={16} />]];
+  const reviewAppointment = (alert) => { dismissArrivalAlert(alert.id); setTab('hub'); openA(alert.appointment); };
+  const openTab = (key) => { setTab(key); if (key === 'logs') setNewAppointmentCount(0); };
+  const liveLabel = realtimeStatus === 'live' ? 'LIVE MONITORING' : realtimeStatus === 'offline' ? 'OFFLINE' : 'CONNECTING';
+  return <div className="shell"><style>{css}</style><aside><button className="brand" onClick={() => openTab('hub')}><span><ShieldCheck size={17} /></span><div><b>RION_CORE</b><small>OPERATIONS</small></div></button><nav>{nav.map(([key, label, icon]) => <button key={key} className={tab === key ? 'on' : ''} onClick={() => openTab(key)}>{icon}<label>{label}</label>{key === 'logs' && (newAppointmentCount > 0 || needs.length > 0) && <i className={newAppointmentCount ? 'new-count' : ''}>{newAppointmentCount || needs.length}</i>}</button>)}</nav><button className="logout" onClick={() => setConfirm(true)}><LogOut size={16} /><label>Sign Out</label></button></aside><main>
+    {tab === 'hub' && <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}><div className="head"><div><p>Admin command center</p><h1>Welcome back, {name}</h1><span>{now.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}</span></div><div className={`live ${realtimeStatus}`}><i /> {liveLabel} <b>{now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</b></div></div>
+      {error ? <div className="error"><AlertTriangle /><div><b>System data unavailable</b><span>{error}</span></div><button onClick={load}><RefreshCw size={15} />Retry</button></div> : loading ? <Skeleton /> : <>{scopeWarning && <div className="scope-warning"><AlertTriangle size={14} /> Project scope details are temporarily unavailable. Appointment operations remain available.</div>}<div className="kpis"><Kpi index={0} label="Active jobs" value={activeJobs.length} hint="Currently being handled" color={C.blue} icon={<Activity size={18} />} onClick={() => setFocus('active')} /><Kpi index={1} label="Today" value={today.length} hint="Appointments scheduled today" color={C.gold} icon={<CalendarClock size={18} />} onClick={() => setFocus('today')} /><Kpi index={2} label="Needs action" value={needs.length} hint="Assignment, priority, payment" color={C.amber} icon={<AlertTriangle size={18} />} onClick={() => setFocus('all')} /><Kpi index={3} label="Completed" value={completed.length} hint="All completed jobs" color={C.green} icon={<CheckCircle2 size={18} />} onClick={() => setTab('logs')} /></div>
+        <div className="grid primary-grid"><Panel title="Needs your attention" action={<div className="pills">{[['all', 'All', needs.length], ['unassigned', 'Unassigned', unassigned.length], ['payments', 'Payments', payments.length], ['priority', 'Priority', priority.length]].map(([key, label, count]) => <button key={key} className={focus === key ? 'sel' : ''} onClick={() => setFocus(key)}>{label} <b>{count}</b></button>)}</div>}><div className="caption">Assignment, payment, and high-priority work requiring review.</div><div className="scroll">{list.length ? list.slice(0, 4).map((a) => <Row key={a.id} a={a} tech={techName[a.technician_id]} data={getScope(a)} onOpen={openA} category={category(a)} />) : <Empty>No items need attention</Empty>}</div></Panel><Panel title="Next up" action={<span className="next-label"><Clock3 size={13} /> UPCOMING</span>}>{nextUp ? <button className="next-card" onClick={() => openA(nextUp.a)}><div className="next-time"><strong>{time(nextUp.a.appointment_time)}</strong><span>{countdown(nextUp.at)}</span></div><div><b>{nextUp.a.full_name || 'Unnamed customer'}</b><span>{nextUp.a.service_type || 'Service not specified'}</span><span className="next-tech">{techName[nextUp.a.technician_id] || 'Technician unassigned'}</span><Scope data={getScope(nextUp.a)} /></div><Badge color={tone(nextUp.a.status)}>{nice(nextUp.a.status)}</Badge></button> : <Empty>No upcoming appointments</Empty>}</Panel></div>
+        <div className="grid operations"><Panel title="Today's schedule" action={<Badge color={C.gold}>{today.length} booked</Badge>}><div className="timeline">{today.length ? today.map((a) => <motion.button layout key={a.id} className="timeline-row" onClick={() => openA(a)} initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }}><time>{time(a.appointment_time)}</time><span className="dot" style={{ background: tone(a.status) }} /><div className="timeline-info"><b>{a.full_name || 'Unnamed customer'}</b><span>{a.service_type || 'Service not specified'} · {techName[a.technician_id] || 'Unassigned'}</span><Scope data={getScope(a)} /></div><Badge color={tone(a.status)}>{nice(a.status)}</Badge></motion.button>) : <Empty>No appointments are scheduled for today.</Empty>}</div></Panel><Panel title="Live operations" action={<span className="live-label"><i /> LIVE</span>}><div className="scroll">{activeJobs.length ? activeJobs.slice(0, 4).map((a) => <Row key={a.id} a={a} tech={techName[a.technician_id]} data={getScope(a)} onOpen={openA} />) : <Empty>No technicians are currently handling active jobs.</Empty>}</div></Panel></div>
+        <div className="grid bottom"><Panel title="Technician status" action={<button className="link" onClick={() => setTab('techs')}>Manage <ChevronRight size={14} /></button>}><div className="techstats"><div><b>{techs.length}</b><span>Total technicians</span></div><div><b>{working.length}</b><span>Working now</span></div><div><b>{techs.filter((t) => appointments.some((a) => a.technician_id === t.id && a.status?.toLowerCase() === 'assigned')).length}</b><span>Assigned</span></div><div><b>{techs.length - busy.size}</b><span>Without active job</span></div></div><div className="small-title">Technician load</div><div className="loads">{techLoad.length ? techLoad.slice(0, 4).map(({ tech, jobs }) => <div className="load" key={tech.id}><div><b>{techName[tech.id]}</b><span>{jobs} active {jobs === 1 ? 'job' : 'jobs'}</span></div><i><em style={{ width: `${(jobs / maxLoad) * 100}%` }} /></i></div>) : <span className="muted">No technician records available.</span>}</div></Panel><Panel title="Project scope" action={<MapPinned size={15} color={C.gold} />}>{nextUp ? <ProjectScope appointment={nextUp.a} data={getScope(nextUp.a)} onOpen={openA} /> : <Empty>Select an appointment to view its scope</Empty>}</Panel><Panel title="Recent activity" action={<button className="link" onClick={() => setTab('logs')}>All activity <ChevronRight size={14} /></button>}><div className="activity">{logs.length ? logs.slice(0, 5).map((l) => { const a = appointments.find((x) => x.id === l.appointment_id); return <div key={l.id}><i /><section><b>{l.action || 'Appointment updated'}</b><span>{a?.full_name || 'Appointment'} · {ago(l.created_at)}</span></section></div>; }) : <Empty>No recent activity</Empty>}</div></Panel></div></>}</motion.div>}
+    {tab === 'techs' && <TechnicianManagement />}{tab === 'services' && <ServiceManagement />}{tab === 'users' && <UserManagement />}{tab === 'logs' && <ServiceLogs onEdit={openA} />}</main>
+    {selected && <ServiceProjectDetailsModal appointment={selected} profiles={profiles} isOpen={detailsOpen} onClose={() => { setDetailsOpen(false); setSelected(null); }} onEdit={() => { setDetailsOpen(false); setEdit(true); }} />}
+    {selected && <EditAppointmentModal isOpen={edit} appointment={selected} isDark onClose={() => { setEdit(false); setSelected(null); }} onUpdate={load} />}
+    <AnimatePresence>{confirm && <motion.div className="overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.div className="modal" initial={{ opacity: 0, y: 12, scale: .97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 12, scale: .97 }}><button className="x" onClick={() => setConfirm(false)}><X size={17} /></button><ShieldCheck size={27} color={C.gold} /><h2>Sign out?</h2><p>Are you sure you want to end your admin session?</p><footer><button onClick={() => setConfirm(false)}>Cancel</button><button className="primary" onClick={() => { setConfirm(false); onLogout?.(); }}>Sign Out</button></footer></motion.div></motion.div>}</AnimatePresence>
+    <AnimatePresence>{arrivalAlerts.map((alert) => <motion.div key={alert.id} className="arrival-alert" initial={{ opacity: 0, x: 24, y: -8 }} animate={{ opacity: 1, x: 0, y: 0 }} exit={{ opacity: 0, x: 24 }}><BellRing size={18} /><div><small>New appointment received</small><b>{alert.appointment.full_name || 'New customer'}</b><span>{alert.appointment.service_type || 'Service not specified'}</span><button onClick={() => reviewAppointment(alert)}>Review appointment <ChevronRight size={14} /></button></div><button className="alert-close" aria-label="Dismiss new appointment alert" onClick={() => dismissArrivalAlert(alert.id)}><X size={15} /></button></motion.div>)}</AnimatePresence>
+  </div>;
+}
+function ServiceProjectDetailsModal({ appointment, profiles, isOpen, onClose, onEdit }) {
+  const [data, setData] = useState({});
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    if (!isOpen || !appointment?.id) return undefined;
+    let alive = true;
+    Promise.all([
+      appointment.service_id ? supabase.from('service_types').select('*, service_categories(name)').eq('id', appointment.service_id).maybeSingle() : Promise.resolve({ data: null }),
+      supabase.from('appointment_project_details').select('*').eq('appointment_id', appointment.id).maybeSingle(),
+      supabase.from('manager_notes').select('*').eq('appointment_id', appointment.id).order('created_at', { ascending: false }).limit(1).maybeSingle(),
+      supabase.from('qc_reports').select('*').eq('appointment_id', appointment.id).order('created_at', { ascending: false }).limit(1).maybeSingle(),
+    ]).then(([service, project, note, qc]) => { if (alive) { setData({ service: service.data, project: project.data, note: note.data, qc: qc.data }); setLoading(false); } });
+    return () => { alive = false; };
+  }, [appointment, isOpen]);
+  if (!isOpen || !appointment) return null;
+  const person = (id) => { const p = profiles.find((entry) => entry.id === id); return p ? `${p.first_name || ''} ${p.last_name || ''}`.trim() || p.email : ''; };
+  const customer = profiles.find((entry) => entry.id === appointment.user_id);
+  const project = data.project;
+  const service = data.service;
+  const qcStatus = appointment.qc_status || (data.qc?.approved === true ? 'Approved' : data.qc?.approved === false ? 'Not approved' : '');
+  const attention = !appointment.technician_id && !terminal.includes(appointment.status?.toLowerCase()) ? 'Technician assignment is still pending.' : appointment.payment_status?.toLowerCase() === 'pending' ? 'Payment is still pending.' : '';
+  return <AnimatePresence><motion.div className="project-overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose}><motion.article className="project-details" initial={{ opacity: 0, y: 12, scale: .97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 12, scale: .97 }} onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-label="Appointment details">
+    <header className="project-head"><div><p>Appointment details</p><h2>{appointment.full_name || 'Unnamed customer'}</h2><strong>{appointment.service_type || service?.title || 'Service not specified'}</strong></div><div className="project-status"><Badge color={tone(appointment.status)}>{nice(appointment.status)}</Badge><Badge color={tone(appointment.priority)}>{nice(appointment.priority || 'normal')}</Badge></div><button className="detail-x" onClick={onClose} aria-label="Close details"><X size={18} /></button></header>
+    <main className="project-body">{loading ? <div className="detail-loading">Loading appointment information…</div> : <>{attention && <p className="detail-warning">{attention}</p>}<div className="detail-columns"><ViewSection title="Customer"><ViewGrid rows={[["Name", appointment.full_name], ["Email", customer?.email || appointment.email], ["Phone", appointment.phone]]} /></ViewSection><ViewSection title="Schedule"><ViewGrid rows={[["Date", appointment.schedule_date], ["Time", appointment.appointment_time]]} /></ViewSection></div><div className="detail-columns"><ViewSection title="Service"><ViewGrid rows={[["Service", appointment.service_type || service?.title], ["Category", service?.service_categories?.name || 'Not provided'], ["Duration", service?.duration]]} /></ViewSection><ViewSection title="Assignment"><ViewGrid rows={[["Technician", appointment.technician_id ? person(appointment.technician_id) : 'Unassigned'], ["Assignment status", nice(appointment.status)], ["Assigned at", formatDetailDate(appointment.assigned_at, '')], ["Assigned by", appointment.assigned_by ? person(appointment.assigned_by) : '']]} /></ViewSection></div>{appointment.address && <ViewSection title="Location"><ViewGrid rows={[["Address", appointment.address]]} /></ViewSection>}{(appointment.details || service?.description) && <ViewSection title="Description"><p className="detail-copy">{appointment.details || service?.description}</p></ViewSection>}{project && <ViewSection title="Project details"><ViewGrid rows={[["Property type", project.property_type], ["Property size", project.property_size ? `${project.property_size} ${project.property_size_unit || ''}`.trim() : ''], ["Floor count", project.floor_count], ["Room count", project.room_count]]} />{[["Site notes", project.site_notes], ["Customer requirements", project.customer_requirements], ["Customer comments", project.customer_comments]].filter(([, value]) => value).map(([label, value]) => <ViewNote key={label} label={label} value={value} />)}</ViewSection>}<div className="detail-columns">{(appointment.payment_method || appointment.payment_status || appointment.price != null || appointment.downpayment_paid || appointment.payment_ref || appointment.reference_number) && <ViewSection title="Payment"><ViewGrid rows={[["Payment method", appointment.payment_method], ["Payment status", nice(appointment.payment_status)], ["Price", formatMoney(appointment.price)], ["Downpayment paid", formatMoney(appointment.downpayment_paid)], ["Payment reference", appointment.payment_ref || appointment.reference_number]]} /></ViewSection>}{(appointment.materials_notes || appointment.manager_notes || data.note?.note || qcStatus || appointment.customer_feedback || appointment.customer_rating) && <ViewSection title="Additional information">{appointment.materials_notes && <ViewNote label="Materials notes" value={appointment.materials_notes} />}{(appointment.manager_notes || data.note?.note) && <ViewNote label="Manager notes" value={appointment.manager_notes || data.note.note} />}<ViewGrid rows={[["QC status", qcStatus], ["Customer rating", appointment.customer_rating]]} />{appointment.customer_feedback && <ViewNote label="Customer feedback" value={appointment.customer_feedback} />}</ViewSection>}</div><ViewSection title="Appointment information" technical><ViewGrid rows={[["Appointment ID", appointment.id], ["Created", formatDetailDate(appointment.created_at)]]} /></ViewSection></>}</main><footer className="project-footer"><button onClick={onClose}>Close</button><button className="edit-project" onClick={onEdit}>Edit appointment</button></footer>
+  </motion.article></motion.div></AnimatePresence>;
+}
+const ViewSection = ({ title, children, technical = false }) => <section className={`detail-section${technical ? ' technical' : ''}`}><h3>{title}</h3>{children}</section>;
+const ViewGrid = ({ rows }) => <dl className="info-grid">{rows.filter(([, value]) => value !== null && value !== undefined && value !== '').map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>;
+const ViewNote = ({ label, value }) => <div className="detail-note"><small>{label}</small><p>{value}</p></div>;
 
-    return () => supabase.removeChannel(ch);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const toggleTheme = () => {
-    setIsDark(d => { localStorage.setItem('theme', !d ? 'dark' : 'light'); return !d; });
+function LegacyServiceProjectDetailsModal({ appointment, profiles, isOpen, onClose, onEdit }) {
+  const [data, setData] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  useEffect(() => {
+    if (!isOpen || !appointment?.id) return undefined;
+    let alive = true;
+    const fetchDetails = async () => {
+      setLoading(true); setLoadError(false);
+      const serviceRequest = appointment.service_id
+        ? supabase.from('service_types').select('*, service_categories(name)').eq('id', appointment.service_id).maybeSingle()
+        : Promise.resolve({ data: null });
+      const [service, project, areaRows, itemRows, reports, photos, qc, notes, logs] = await Promise.all([
+        serviceRequest,
+        supabase.from('appointment_project_details').select('*').eq('appointment_id', appointment.id).maybeSingle(),
+        supabase.from('appointment_areas').select('*').eq('appointment_id', appointment.id).order('created_at'),
+        supabase.from('appointment_items').select('*').eq('appointment_id', appointment.id).order('created_at'),
+        supabase.from('service_reports').select('*').eq('appointment_id', appointment.id).order('created_at', { ascending: false }),
+        supabase.from('job_photos').select('*').eq('appointment_id', appointment.id).order('created_at'),
+        supabase.from('qc_reports').select('*').eq('appointment_id', appointment.id).order('created_at', { ascending: false }),
+        supabase.from('manager_notes').select('*').eq('appointment_id', appointment.id).order('created_at', { ascending: false }),
+        supabase.from('job_logs').select('*').eq('appointment_id', appointment.id).order('created_at', { ascending: false }),
+      ]);
+      if (!alive) return;
+      setData({ service: service.data, project: project.data, areas: areaRows.data || [], items: itemRows.data || [], reports: reports.data || [], photos: photos.data || [], qc: qc.data || [], notes: notes.data || [], logs: logs.data || [] });
+      setLoadError(Boolean(service.error || project.error || areaRows.error || itemRows.error || reports.error || photos.error || qc.error || notes.error || logs.error));
+      setLoading(false);
+    };
+    fetchDetails();
+    return () => { alive = false; };
+  }, [appointment, isOpen]);
+  if (!isOpen || !appointment) return null;
+  const profile = (id) => profiles.find((entry) => entry.id === id);
+  const person = (id, fallback = 'Not available') => {
+    const entry = profile(id); if (!entry) return fallback;
+    return `${entry.first_name || ''} ${entry.last_name || ''}`.trim() || entry.email || fallback;
   };
+  const customer = profile(appointment.user_id);
+  const needsAttention = [
+    appointment.status?.toLowerCase() === 'pending' && 'Appointment is awaiting review.',
+    !appointment.technician_id && !terminal.includes(appointment.status?.toLowerCase()) && 'Technician has not been assigned.',
+    appointment.payment_status?.toLowerCase() === 'pending' && 'Payment is still pending.',
+    !appointment.schedule_date && !terminal.includes(appointment.status?.toLowerCase()) && 'Appointment schedule is incomplete.',
+    appointment.status?.toLowerCase() === 'completed' && String(appointment.qc_status || '').toLowerCase() === 'pending' && 'Quality control review is pending.',
+  ].filter(Boolean);
+  const created = formatDetailDate(appointment.created_at);
+  const itemTotal = data.items?.reduce((sum, item) => sum + Number(item.total_price || 0), 0) || 0;
+  return <AnimatePresence><motion.div className="project-overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose}><motion.article className="project-details" initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 18 }} onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-label="Service project details">
+    <header className="project-head"><div><p>Service project</p><h2>{appointment.full_name || 'Unnamed customer'}</h2><strong>{appointment.service_type || data.service?.title || 'Service not specified'}</strong><div className="project-meta"><Badge color={tone(appointment.status)}>{nice(appointment.status)}</Badge><span>Priority: {nice(appointment.priority || 'normal')}</span></div></div><button className="detail-x" onClick={onClose} aria-label="Close details"><X size={18} /></button><dl><div><dt>Appointment ID</dt><dd>{appointment.id}</dd></div><div><dt>Created</dt><dd>{created}</dd></div></dl></header>
+    <main className="project-body">{loading ? <div className="detail-loading">Loading project information…</div> : <>{loadError && <p className="detail-warning">Some related project information could not be loaded. Available records are shown below.</p>}
+      <DetailSection title="Needs attention"><ul className="attention-list">{needsAttention.length ? needsAttention.map((item) => <li key={item}>{item}</li>) : <li>No action required.</li>}</ul></DetailSection>
+      <DetailSection title="Customer"><InfoGrid rows={[['Name', appointment.full_name || 'Not provided'], ['Email', customer?.email || 'Not available'], ['Address', appointment.address || 'Not provided']]} /></DetailSection>
+      <DetailSection title="Service details"><InfoGrid rows={[['Service', appointment.service_type || data.service?.title || 'Not provided'], ['Category', data.service?.service_categories?.name || 'Not available'], ['Description', data.service?.description || 'Not available'], ['Duration', data.service?.duration || 'Not available'], ['Survey required', (appointment.requires_survey ?? data.service?.requires_survey) ? 'Yes' : 'No']]} /></DetailSection>
+      <DetailSection title="Project & site details">{data.project ? <InfoGrid rows={[['Property type', data.project.property_type || 'Not provided'], ['Property size', data.project.property_size ? `${data.project.property_size} ${data.project.property_size_unit || ''}`.trim() : 'Not provided'], ['Floors', data.project.floor_count ?? 'Not provided'], ['Rooms', data.project.room_count ?? 'Not provided'], ['Site notes', data.project.site_notes || 'Not provided'], ['Customer requirements', data.project.customer_requirements || 'Not provided'], ['Customer comments', data.project.customer_comments || 'Not provided']]} /> : <EmptyDetail>No project details have been added.</EmptyDetail>}</DetailSection>
+      <DetailSection title="Service areas">{data.areas?.length ? <div className="area-list">{data.areas.map((area) => <div key={area.id}><b>{area.area_name || 'Unnamed area'}</b><span>{area.area_size ? `${area.area_size} ${area.area_size_unit || ''}` : 'Size not provided'} · Quantity: {area.quantity ?? 'Not provided'}</span>{area.notes && <p>{area.notes}</p>}</div>)}</div> : <EmptyDetail>No service areas have been added.</EmptyDetail>}</DetailSection>
+      <DetailSection title="Project items">{data.items?.length ? <><div className="item-list">{data.items.map((item) => <div key={item.id}><b>{item.item_name || 'Unnamed item'}</b><span>{item.description || 'No description'}</span><em>Qty {item.quantity ?? '—'} · Unit {formatMoney(item.unit_price)} · Total {formatMoney(item.total_price)}</em></div>)}</div><p className="items-total">Items total <b>{formatMoney(itemTotal)}</b></p></> : <EmptyDetail>No project items have been added.</EmptyDetail>}</DetailSection>
+      <DetailSection title="Schedule"><InfoGrid rows={[['Appointment date', appointment.schedule_date || 'Not yet'], ['Appointment time', appointment.appointment_time || 'Not yet'], ['Assigned', formatDetailDate(appointment.assigned_at, 'Not yet')], ['Started', formatDetailDate(appointment.started_at, 'Not yet')], ['Completed', formatDetailDate(appointment.completed_at, 'Not yet')]]} /></DetailSection>
+      <DetailSection title="Technician assignment"><InfoGrid rows={[['Technician', appointment.technician_id ? person(appointment.technician_id) : 'Not assigned'], ['Assigned by', appointment.assigned_by ? person(appointment.assigned_by) : 'Not available'], ['Assigned at', formatDetailDate(appointment.assigned_at, 'Not yet')]]} />{!appointment.technician_id && <p className="assignment-note">Action required: Technician assignment is still pending.</p>}</DetailSection>
+      <DetailSection title="Payment"><InfoGrid rows={[['Service price', formatMoney(appointment.price)], ['Downpayment paid', formatMoney(appointment.downpayment_paid)], ['Payment status', nice(appointment.payment_status)], ['Payment method', appointment.payment_method || 'Not provided'], ...(appointment.reference_number ? [['Reference number', appointment.reference_number]] : []), ...(appointment.payment_ref ? [['Payment reference', appointment.payment_ref]] : [])]} />{appointment.receipt_image && <a className="receipt-link" href={appointment.receipt_image} target="_blank" rel="noreferrer">View receipt</a>}</DetailSection>
+      <DetailSection title="Request details"><InfoGrid rows={[['Customer request', appointment.details || 'Not provided'], ['Materials / site notes', appointment.materials_notes || 'Not provided'], ['Survey required', appointment.requires_survey ? 'Yes' : 'No']]} /></DetailSection>
+      <DetailSection title="Manager notes">{appointment.manager_notes && <div className="current-note"><small>Current manager note</small><p>{appointment.manager_notes}</p></div>}{data.notes?.length ? <div className="note-history">{data.notes.map((note) => <div key={note.id}><small>{formatDetailDate(note.created_at)}</small><p>{note.note || 'No note text'}</p></div>)}</div> : !appointment.manager_notes && <EmptyDetail>No manager notes have been added.</EmptyDetail>}</DetailSection>
+      <DetailSection title="Activity">{data.logs?.length ? <div className="activity-list">{data.logs.map((log) => <div key={log.id}><small>{formatDetailDate(log.created_at)}</small><p>{log.action || 'Appointment updated'}</p>{log.performed_by && <span>{person(log.performed_by)}</span>}</div>)}</div> : <EmptyDetail>No activity has been recorded yet.</EmptyDetail>}</DetailSection>
+      <DetailSection title="Service report">{data.reports?.length ? data.reports.map((report) => <InfoGrid key={report.id} rows={[['Service performed', report.service_performed || 'Not provided'], ['Items used', report.items_used || 'Not provided'], ['Completion time', report.completion_time || 'Not provided'], ['Technician', report.technician_name || 'Not provided'], ['Technician notes', report.technician_notes || 'Not provided']]} />) : <EmptyDetail>No service report has been submitted yet.</EmptyDetail>}</DetailSection>
+      <DetailSection title="Job photos">{data.photos?.length ? <div className="photo-grid">{data.photos.map((photo) => <figure key={photo.id}><img src={photo.photo_url} alt={photo.photo_type ? `${photo.photo_type} job photo` : 'Job photo'} onError={(event) => { event.currentTarget.style.display = 'none'; }} /><figcaption>{photo.photo_type || 'Job photo'}</figcaption></figure>)}</div> : <EmptyDetail>No job photos have been uploaded yet.</EmptyDetail>}</DetailSection>
+      <DetailSection title="Quality control"><InfoGrid rows={[['QC status', appointment.qc_status || 'Not available']]} />{data.qc?.length ? data.qc.map((report) => <InfoGrid key={report.id} rows={[['Inspector', report.inspector_id ? person(report.inspector_id) : 'Not available'], ['Approved', report.approved === null || report.approved === undefined ? 'Not available' : report.approved ? 'Yes' : 'No'], ['Findings', report.findings || 'Not provided'], ['Remarks', report.remarks || 'Not provided']]} />) : <EmptyDetail>No QC report has been submitted yet.</EmptyDetail>}</DetailSection>
+      <DetailSection title="Customer feedback">{appointment.customer_rating || appointment.customer_feedback ? <InfoGrid rows={[['Rating', appointment.customer_rating || 'Not provided'], ['Feedback', appointment.customer_feedback || 'Not provided']]} /> : <EmptyDetail>No customer feedback yet.</EmptyDetail>}</DetailSection>
+    </>}</main><footer className="project-footer"><button onClick={onClose}>Close</button><button className="edit-project" onClick={onEdit}>Edit appointment</button></footer>
+  </motion.article></motion.div></AnimatePresence>;
+}
+const DetailSection = ({ title, children }) => <section className="detail-section"><h3>{title}</h3>{children}</section>;
+const EmptyDetail = ({ children }) => <p className="detail-empty">{children}</p>;
+const InfoGrid = ({ rows }) => <dl className="info-grid">{rows.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>;
+const formatMoney = (value) => value === null || value === undefined || value === '' ? 'Not provided' : `₱${Number(value).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+const formatDetailDate = (value, fallback = 'Not available') => value ? new Date(value).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : fallback;
 
-  /* ─── derived data ─── */
-  const technicians  = useMemo(() => profiles.filter(p => p.role === 'technician'), [profiles]);
-  const techniciansById = useMemo(() => Object.fromEntries(technicians.map(t => [t.id, t])), [technicians]);
-
-  const overview = useMemo(() => {
-    const activeJobs      = appointments.filter(a => ['assigned', 'in_progress'].includes(a.status)).length;
-    const todaysSchedule   = appointments.filter(a => isToday(a.scheduled_date || a.scheduled_at || a.created_at)).length;
-    const waitingAssignment= appointments.filter(a => !a.technician_id && ['pending', 'approved', 'scheduled'].includes(a.status)).length;
-    const pendingPayments  = appointments.filter(a => a.payment_status === 'pending' && a.status === 'completed').length;
-    const pendingQc        = qcReports.filter(q => (q.status || '').toLowerCase() === 'pending').length;
-    const completedJobs    = appointments.filter(a => a.status === 'completed').length;
-    return { activeJobs, todaysSchedule, waitingAssignment, pendingPayments, pendingQc, completedJobs };
-  }, [appointments, qcReports]);
-
-  const liveAppointments = useMemo(() =>
-    appointments.filter(a => a.status !== 'completed' && a.status !== 'cancelled').slice(0, 8),
-  [appointments]);
-
-  /* ─── actions ─── */
-  const runAction = async () => {
-    if (!actionConfirm) return;
-    const { apt, kind } = actionConfirm;
-    const isApprove = kind === 'approve';
-    const payload = { status: isApprove ? 'scheduled' : 'cancelled', ...(!isApprove && { payment_status: 'cancelled' }) };
-    const { error } = await supabase.from('appointments').update(payload).eq('id', apt.id);
-    setActionConfirm(null);
-    if (!error) {
-      notify({ type: isApprove ? 'success' : 'info', title: isApprove ? 'Appointment approved' : 'Appointment cancelled', message: apt.full_name });
-      loadAll();
-    } else {
-      notify({ type: 'error', title: 'Action failed', message: error.message });
-    }
-  };
-
-  /* ─── logout: confirm → background blur/zoom (via wrapper state) →
-       auth signOut happens quietly → full-screen fade-to-navy → hand off ─── */
-  const handleLogoutConfirm = () => {
-    setLogoutConfirm(false);
-    setLoggingOut(true);
-    supabase.auth.signOut();
-  };
-
-  const finishLogout = useCallback(() => {
-    if (onLogout) onLogout();
-  }, [onLogout]);
-
-  const TABS = [
-    { key: 'hub',      icon: <LayoutDashboard size={17} />, label: 'Command Center' },
-    { key: 'services', icon: <Zap             size={17} />, label: 'Services'       },
-    { key: 'users',    icon: <Users           size={17} />, label: 'Personnel'      },
-    { key: 'techs',    icon: <Wrench          size={17} />, label: 'Field Force'    },
-    { key: 'logs',     icon: <Database        size={17} />, label: 'Logs'           },
-  ];
-
-  const dimmed = logoutConfirm || loggingOut;
-
-  return (
-    <>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;700;800&display=swap');
-        * { box-sizing: border-box; }
-        body { margin: 0; background: ${NAVY_DEEP}; }
-        .adm-scroll::-webkit-scrollbar { width: 4px; }
-        .adm-scroll::-webkit-scrollbar-track { background: transparent; }
-        .adm-scroll::-webkit-scrollbar-thumb { background: rgba(232,176,0,0.18); border-radius: 4px; }
-        @keyframes adm-spin { to { transform: rotate(360deg); } }
-        .adm-spin { animation: adm-spin 1.2s linear infinite; }
-        @media (max-width: 900px) { .adm-sidebar-full { display: none; } }
-        input, select { color-scheme: dark; }
-        option { background: ${NAVY}; }
-      `}</style>
-
-      <motion.div
-        animate={{
-          filter: dimmed ? 'blur(7px)' : 'blur(0px)',
-          scale: dimmed ? 0.965 : 1,
-        }}
-        transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-        style={{ display: 'flex', height: '100vh', background: NAVY_DEEP, fontFamily: FONT_BODY, overflow: 'hidden' }}
-      >
-
-        {/* ══ SIDEBAR ══ */}
-        <aside className="adm-sidebar-full" style={{
-          width: 240, background: `${NAVY}ee`, borderRight: `1px solid ${NAVY_LINE}`,
-          display: 'flex', flexDirection: 'column', flexShrink: 0, overflow: 'hidden',
-          backdropFilter: 'blur(20px)',
-        }}>
-          <div onClick={() => setActiveTab('hub')} style={{
-            padding: '24px 20px', borderBottom: `1px solid ${NAVY_LINE}`,
-            display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer',
-          }}>
-            <div style={{
-              width: 38, height: 38, background: GOLD, flexShrink: 0, borderRadius: 10,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: NAVY_DEEP, boxShadow: `0 0 20px ${GOLD}30`,
-            }}>
-              <ShieldCheck size={18} />
-            </div>
-            <div>
-              <div style={{ fontFamily: FONT_DISPLAY, fontSize: 20, letterSpacing: '0.08em', color: GOLD, lineHeight: 1 }}>RION_CORE</div>
-              <div style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.36em', textTransform: 'uppercase', color: TEXT_DIM }}>Command Center</div>
-            </div>
-          </div>
-
-          <nav style={{ flex: 1, padding: '14px 0', overflowY: 'auto' }} className="adm-scroll">
-            {TABS.map(t => (
-              <NavItem
-                key={t.key} icon={t.icon} label={t.label}
-                active={activeTab === t.key} onClick={() => setActiveTab(t.key)}
-              />
-            ))}
-          </nav>
-
-          <div style={{ padding: '12px 0', borderTop: `1px solid ${NAVY_LINE}` }}>
-            <NavItem icon={isDark ? <Sun size={17} /> : <Moon size={17} />} label={isDark ? 'Light Mode' : 'Dark Mode'} onClick={toggleTheme} />
-            <NavItem icon={<LogOut size={17} />} label="Terminate Session" onClick={() => setLogoutConfirm(true)} />
-          </div>
-        </aside>
-
-        {/* ══ MAIN ══ */}
-        <main className="adm-scroll" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          <div className="adm-scroll" style={{ flex: 1, overflowY: 'auto', padding: '24px 28px' }}>
-
-            {/* ══ HUB ══ */}
-            {activeTab === 'hub' && (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} key="hub">
-
-                {/* hero */}
-                <HeroSection adminName={adminName} overview={overview} />
-
-                {/* executive overview */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6,1fr)', gap: 12, marginBottom: 20 }}>
-                  <StatCard label="Active Jobs"        value={overview.activeJobs}        icon={<Wrench size={17} />}         tone={GOLD} delay={0} />
-                  <StatCard label="Today's Schedule"   value={overview.todaysSchedule}     icon={<CalendarClock size={17} />}  tone={GOLD} delay={0.03} />
-                  <StatCard label="Waiting Assignment" value={overview.waitingAssignment}  icon={<UserX2 size={17} />}         tone={GOLD} delay={0.06} />
-                  <StatCard label="Pending Payments"   value={overview.pendingPayments}    icon={<DollarSign size={17} />}     tone={GOLD} delay={0.09} />
-                  <StatCard label="Pending QC"         value={overview.pendingQc}          icon={<ClipboardCheck size={17} />} tone={GOLD} delay={0.12} />
-                  <StatCard label="Completed Jobs"     value={overview.completedJobs}      icon={<CheckCircle2 size={17} />}   tone={GOLD} delay={0.15} />
-                </div>
-
-                {/* urgent action center — full width */}
-                <div style={{ marginBottom: 20 }}>
-                  <UrgentActionCenter
-                    appointments={appointments}
-                    qcReports={qcReports}
-                    onSelect={(apt) => { setSelectedApt(apt); setIsEditOpen(true); }}
-                  />
-                </div>
-
-                {/* analytics + timeline */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 280px', gap: 16, marginBottom: 16 }}>
-                  <ServiceAnalytics appointments={appointments} />
-                  <DashboardCard title="Live Activity" delay={0.1}>
-                    <ActivityTimeline events={timeline} />
-                  </DashboardCard>
-                </div>
-
-                {/* live operations — full width */}
-                <div style={{ marginBottom: 16 }}>
-                  <LiveOperationsPanel
-                    appointments={liveAppointments}
-                    techniciansById={techniciansById}
-                    loading={loading}
-                    onEdit={(apt) => { setSelectedApt(apt); setIsEditOpen(true); }}
-                    onApprove={(apt) => setActionConfirm({ apt, kind: 'approve' })}
-                    onReject={(apt) => setActionConfirm({ apt, kind: 'reject' })}
-                  />
-                </div>
-
-                {/* field force + customer experience + QC */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 16 }}>
-                  <TechnicianPerformance technicians={technicians} appointments={appointments} />
-                  <CustomerExperience serviceReports={serviceReports} />
-                  <QualityControlCenter qcReports={qcReports} />
-                </div>
-              </motion.div>
-            )}
-
-            {activeTab === 'techs'    && <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} key="techs"><TechnicianManagement /></motion.div>}
-            {activeTab === 'services' && <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} key="services"><ServiceManagement /></motion.div>}
-            {activeTab === 'users'    && <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} key="users"><UserManagement /></motion.div>}
-            {activeTab === 'logs'     && <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} key="logs"><ServiceLogs onEdit={(apt) => { setSelectedApt(apt); setIsEditOpen(true); }} /></motion.div>}
-          </div>
-        </main>
-      </motion.div>
-
-      {selectedApt && (
-        <EditAppointmentModal
-          isOpen={isEditOpen}
-          appointment={selectedApt}
-          isDark={isDark}
-          onClose={() => { setIsEditOpen(false); setSelectedApt(null); }}
-          onUpdate={loadAll}
-        />
-      )}
-
-      <ConfirmModal
-        open={logoutConfirm}
-        title="Terminate Admin Session?"
-        message="You'll be signed out of RION_CORE and returned to the login screen."
-        confirmLabel="Terminate"
-        cancelLabel="Stay"
-        danger
-        onConfirm={handleLogoutConfirm}
-        onCancel={() => setLogoutConfirm(false)}
-      />
-
-      <ConfirmModal
-        open={!!actionConfirm}
-        title={actionConfirm?.kind === 'approve' ? 'Deploy Technician?' : 'Cancel & Archive?'}
-        message={actionConfirm ? (
-          actionConfirm.kind === 'approve'
-            ? `Move ${actionConfirm.apt.full_name}'s request to scheduled.`
-            : `Cancel and archive ${actionConfirm.apt.full_name}'s request.`
-        ) : ''}
-        confirmLabel={actionConfirm?.kind === 'approve' ? 'Deploy' : 'Archive'}
-        cancelLabel="Back"
-        danger={actionConfirm?.kind === 'reject'}
-        onConfirm={runAction}
-        onCancel={() => setActionConfirm(null)}
-      />
-
-      <LogoutOverlay open={loggingOut} onDone={finishLogout} />
-
-      <PopupCenter />
-    </>
-  );
-};
-
-export default AdminDashboard;
+function ProjectScope({ appointment, data, onOpen }) { return <button className="project" onClick={() => onOpen(appointment)}><b>{appointment.full_name || 'Upcoming appointment'}</b><span>{appointment.service_type || 'Service not specified'}</span><div className="scope-summary"><span><MapPinned size={14} /> {data.areas} {data.areas === 1 ? 'area' : 'areas'}</span><span><PackageCheck size={14} /> {data.itemQuantity || data.items} items</span></div><div className="detail-list">{data.areaNames.length ? data.areaNames.slice(0, 4).map((x, i) => <span key={`${x}-${i}`}>{x}</span>) : <em>No area details recorded.</em>}</div><div className="small-title">Project items</div><div className="detail-list">{data.itemDetails.length ? data.itemDetails.slice(0, 3).map((x, i) => <span key={`${x.name}-${i}`}>{x.name}{x.quantity ? ` × ${x.quantity}` : ''}</span>) : <em>No item details recorded.</em>}</div></button>; }
+function Skeleton() { return <div className="skeleton"><div>{[1,2,3,4].map((x) => <i key={x} />)}</div><div><i /><i /></div><div><i /><i /><i /></div></div>; }
+const css = `
+.project-overlay{position:fixed;inset:0;z-index:10003;display:grid;place-items:center;padding:24px;background:rgba(4,10,20,.78);backdrop-filter:blur(7px)}.project-details{width:min(880px,100%);max-height:85vh;display:flex;flex-direction:column;overflow:hidden;background:linear-gradient(145deg,#0e1b33,#081226);border:1px solid rgba(232,176,0,.3);border-radius:16px;box-shadow:0 28px 80px rgba(0,0,0,.5)}.project-head{position:relative;display:flex;align-items:flex-start;gap:12px;padding:24px 26px 20px;border-bottom:1px solid ${C.line};background:rgba(4,10,20,.24)}.project-head>div:first-child{min-width:0;flex:1}.project-head p,.detail-section h3{margin:0 0 6px;color:${C.gold};font-size:10px;font-weight:800;letter-spacing:.15em;text-transform:uppercase}.project-head h2{margin:0;color:${C.text};font-size:26px;line-height:1.15}.project-head strong{display:block;margin-top:5px;color:${C.muted};font-size:13px;font-weight:600}.project-status{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;padding-top:3px}.detail-x{width:32px;height:32px;padding:0;border:1px solid ${C.line};border-radius:8px;background:transparent;color:${C.muted};display:grid;place-items:center;cursor:pointer}.detail-x:hover{color:${C.gold};border-color:rgba(232,176,0,.42)}.project-body{min-height:0;overflow-y:auto;padding:20px 26px;display:flex;flex-direction:column;gap:14px}.detail-columns{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.detail-section{min-width:0;padding:15px;border:1px solid rgba(140,160,192,.14);border-radius:10px;background:rgba(255,255,255,.018)}.detail-section h3{margin-bottom:12px}.detail-section.technical{background:rgba(255,255,255,.01);border-color:rgba(140,160,192,.1)}.detail-section.technical h3{color:${C.muted}}.info-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:0}.info-grid>div{min-width:0}.info-grid dt{margin:0 0 4px;color:${C.muted};font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase}.info-grid dd{margin:0;color:${C.text};font-size:13px;font-weight:600;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere}.detail-copy,.detail-note p{margin:0;color:${C.text};font-size:13px;line-height:1.65;white-space:pre-wrap;overflow-wrap:anywhere}.detail-note{margin-top:12px;padding-top:12px;border-top:1px solid rgba(140,160,192,.1)}.detail-note small{display:block;margin-bottom:5px;color:${C.muted};font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}.detail-warning{margin:0;padding:10px 12px;border:1px solid rgba(244,205,77,.28);border-radius:8px;background:rgba(244,205,77,.08);color:#f8dc72;font-size:12px;line-height:1.45}.detail-loading{padding:48px 0;text-align:center;color:${C.muted};font-size:13px}.project-footer{display:flex;justify-content:flex-end;gap:9px;padding:16px 26px;border-top:1px solid ${C.line};background:rgba(4,10,20,.3)}.project-footer button{border:1px solid ${C.line};border-radius:8px;background:transparent;color:${C.text};padding:10px 14px;font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;cursor:pointer}.project-footer .edit-project{border-color:${C.gold};background:${C.gold};color:${C.bg}}@media(max-width:620px){.project-overlay{padding:10px}.project-details{max-height:92vh;border-radius:12px}.project-head,.project-body,.project-footer{padding-left:16px;padding-right:16px}.project-head{flex-wrap:wrap}.project-head h2{font-size:22px}.project-status{order:3;width:calc(100% - 44px);justify-content:flex-start;padding-top:0}.detail-columns,.info-grid{grid-template-columns:1fr}.project-footer{position:relative}.project-footer button{flex:1}}
+*{box-sizing:border-box}.shell{display:flex;min-height:100vh;background:${C.bg};color:${C.text};font-family:'DM Sans',Arial,sans-serif}.shell aside{width:226px;flex:none;background:${C.navy};border-right:1px solid ${C.line};display:flex;flex-direction:column}.brand{padding:19px 17px;border:0;border-bottom:1px solid ${C.line};background:transparent;color:${C.text};display:flex;gap:10px;text-align:left;align-items:center;cursor:pointer}.brand>span{display:grid;place-items:center;width:34px;height:34px;border-radius:9px;background:${C.gold};color:${C.bg}}.brand b{font-family:'Bebas Neue',sans-serif;color:${C.gold};font-size:19px;letter-spacing:.05em;display:block}.brand small{color:${C.muted};font-size:9px;letter-spacing:.16em;font-weight:800}.shell nav{padding:13px 9px;flex:1}.shell nav button,.logout{border:0;background:transparent;color:${C.muted};width:100%;display:flex;align-items:center;gap:11px;padding:11px 12px;border-radius:8px;font-weight:800;font-size:12px;text-align:left;cursor:pointer;margin-bottom:3px;transition:.18s}.shell nav button:hover,.logout:hover{background:rgba(255,255,255,.04);color:${C.text}}.shell nav button.on{background:${C.gold};color:${C.bg}}.shell nav i{font-style:normal;margin-left:auto;background:${C.red};color:#fff;border-radius:10px;font-size:10px;padding:2px 6px}.shell nav i.new-count{animation:badge-pop .35s ease-out}.logout{margin:8px 9px 12px;width:calc(100% - 18px)}main{min-width:0;flex:1;padding:20px 24px;overflow:auto}.head{min-height:76px;padding:3px 0 16px;display:flex;align-items:center;justify-content:space-between}.head p{font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:${C.gold};font-weight:800;margin:0 0 5px}.head h1{font-size:26px;line-height:1.1;margin:0 0 4px}.head>div>span{font-size:13px;color:${C.muted}}.live{font-size:11px;letter-spacing:.1em;font-weight:800;color:${C.green};display:flex;gap:7px;align-items:center}.live i,.live-label i{width:7px;height:7px;border-radius:50%;background:currentColor;display:inline-block;animation:pulse 2s infinite}.live.connecting{color:${C.amber}}.live.offline{color:${C.red}}.live b{color:${C.text};margin-left:7px;font-size:14px;letter-spacing:0}.arrival-alert{position:fixed;z-index:10002;right:22px;top:20px;width:min(360px,calc(100vw - 28px));display:flex;gap:11px;padding:14px;background:linear-gradient(145deg,#132543,${C.navy});border:1px solid rgba(232,176,0,.48);border-left:3px solid ${C.gold};border-radius:12px;box-shadow:0 16px 44px rgba(0,0,0,.36);color:${C.gold}}.arrival-alert>div{min-width:0;flex:1}.arrival-alert small,.arrival-alert b,.arrival-alert span{display:block}.arrival-alert small{font-size:9px;letter-spacing:.12em;text-transform:uppercase;font-weight:800}.arrival-alert b{color:${C.text};font-size:14px;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.arrival-alert span{color:${C.muted};font-size:11px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.arrival-alert button{border:0;background:transparent;color:${C.gold};font-weight:800;font-size:10px;padding:8px 0 0;cursor:pointer;display:flex;align-items:center}.arrival-alert .alert-close{padding:0;color:${C.muted};align-self:flex-start}.kpis,.grid{display:grid;gap:12px}.kpis{grid-template-columns:repeat(4,minmax(0,1fr));margin-bottom:12px}.kpi{min-width:0;text-align:left;border:1px solid ${C.line};background:${C.panel};border-radius:12px;padding:14px;display:flex;align-items:center;gap:10px;color:${C.text};cursor:pointer}.kpi:hover{border-color:var(--color)}.kpi-icon{color:var(--color);width:35px;height:35px;border-radius:8px;background:color-mix(in srgb,var(--color) 12%,transparent);display:grid;place-items:center;flex:none}.kpi small,.kpi em{display:block;color:${C.muted};font-size:11px;font-style:normal}.kpi small{text-transform:uppercase;letter-spacing:.09em;font-weight:800}.kpi strong{font-size:28px;display:block;line-height:1.05;margin:3px 0}.kpi em{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.kpi>svg{margin-left:auto;color:var(--color);flex:none}.primary-grid{grid-template-columns:1.3fr .7fr}.operations{grid-template-columns:1.1fr .9fr;margin-top:12px}.bottom{grid-template-columns:1.1fr .9fr 1fr;margin-top:12px}.panel{background:${C.panel};border:1px solid ${C.line};border-radius:12px;padding:14px;min-width:0}.panel header{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:10px}.panel h2{font-size:13px;margin:0;letter-spacing:.04em}.caption{font-size:11px;color:${C.muted};margin:-3px 0 10px}.scroll{max-height:224px;overflow:auto;padding-right:2px}.row{width:100%;border:1px solid rgba(140,160,192,.16);background:rgba(255,255,255,.018);color:${C.text};border-radius:8px;display:flex;align-items:center;text-align:left;gap:9px;padding:9px;margin-bottom:6px;cursor:pointer}.row:hover{border-color:rgba(232,176,0,.48)}.row-info{min-width:0;flex:1}.row-info b,.row-info span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.row-info b{font-size:13px}.row-info>span:not(.scope),.tech{font-size:11px;color:${C.muted};margin-top:2px}.scope{font-size:10px;color:#b6c5da;margin-top:4px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.tech{max-width:92px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.badge{border:1px solid;border-radius:999px;padding:3px 7px;font-size:10px;font-weight:800;text-transform:uppercase;white-space:nowrap}.attention{font-size:9px;letter-spacing:.06em;text-transform:uppercase;font-weight:800;padding:3px 5px;border-radius:4px;background:rgba(244,205,77,.12);color:${C.amber}}.attention.priority{background:rgba(239,68,68,.12);color:#ff9696}.attention.payment{background:rgba(96,165,250,.12);color:${C.blue}}.pills{display:flex;gap:4px;overflow:auto}.pills button,.link{border:0;background:transparent;color:${C.muted};font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap;padding:4px 5px;border-radius:5px}.pills .sel{color:${C.bg};background:${C.gold}}.next-label,.live-label{color:${C.green};font-size:10px;font-weight:800;letter-spacing:.08em;display:flex;gap:5px;align-items:center}.next-label{color:${C.gold}}.next-card{width:100%;border:1px solid rgba(232,176,0,.22);background:rgba(232,176,0,.04);border-radius:9px;color:${C.text};text-align:left;padding:12px;display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;cursor:pointer}.next-card:hover{border-color:${C.gold}}.next-time{padding-right:11px;border-right:1px solid ${C.line};display:flex;flex-direction:column;gap:3px}.next-time strong{color:${C.gold};font-size:13px;white-space:nowrap}.next-time span{font-size:9px;color:${C.muted};font-weight:800}.next-card b,.next-card>div>span{display:block}.next-card b{font-size:13px}.next-card>div>span{font-size:11px;color:${C.muted};margin-top:2px}.next-card .next-tech{color:#b6c5da;margin-top:6px}.timeline{max-height:237px;overflow:auto}.timeline-row{width:100%;display:grid;grid-template-columns:63px 10px minmax(0,1fr) auto;gap:9px;align-items:center;border:0;border-bottom:1px solid rgba(140,160,192,.12);background:transparent;color:${C.text};padding:9px 0;text-align:left;cursor:pointer}.timeline-row:last-child{border-bottom:0}.timeline-row time{font-size:12px;color:${C.gold};font-weight:800}.dot{width:8px;height:8px;border-radius:50%;position:relative}.dot:after{content:'';position:absolute;width:1px;height:41px;left:3px;top:13px;background:rgba(140,160,192,.22)}.timeline-row:last-child .dot:after{display:none}.timeline-info{min-width:0}.timeline-info b,.timeline-info>span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.timeline-info b{font-size:13px}.timeline-info>span{font-size:11px;color:${C.muted};margin-top:2px}.timeline-info .scope{margin-top:3px}.techstats{display:grid;grid-template-columns:1fr 1fr;gap:7px}.techstats div{padding:10px;border-radius:8px;background:rgba(255,255,255,.03)}.techstats b,.techstats span{display:block}.techstats b{font-size:22px;color:${C.gold}}.techstats span{font-size:11px;color:${C.muted};margin-top:2px}.small-title{font-size:10px;color:${C.muted};font-weight:800;text-transform:uppercase;letter-spacing:.11em;margin:14px 0 7px}.loads{display:grid;gap:8px}.load>div{display:flex;justify-content:space-between;gap:8px;font-size:11px}.load b{font-size:11px}.load span,.muted{color:${C.muted};font-size:10px}.load i{display:block;margin-top:4px;height:4px;border-radius:3px;background:rgba(140,160,192,.18);overflow:hidden}.load em{display:block;height:100%;background:${C.gold};border-radius:3px}.link{display:flex;align-items:center;color:${C.gold};padding:0}.project{width:100%;text-align:left;border:0;background:transparent;color:${C.text};padding:0;cursor:pointer}.project>b,.project>span{display:block}.project>b{font-size:13px}.project>span{font-size:11px;color:${C.muted};margin-top:2px}.scope-summary{display:flex;gap:8px;margin:12px 0}.scope-summary span{font-size:11px;color:#c7d5e8;border:1px solid rgba(140,160,192,.17);border-radius:6px;padding:6px;display:flex;align-items:center;gap:5px}.detail-list{display:flex;flex-wrap:wrap;gap:5px}.detail-list span{font-size:10px;border-radius:5px;background:rgba(255,255,255,.04);color:#c7d5e8;padding:4px 6px}.detail-list em{font-size:11px;color:${C.muted};font-style:normal}.activity{max-height:192px;overflow:auto}.activity>div{display:flex;gap:8px;padding:8px 0;border-bottom:1px solid rgba(140,160,192,.1)}.activity>div i{width:7px;height:7px;border-radius:50%;background:${C.blue};margin-top:5px;flex:none}.activity b,.activity span{display:block}.activity b{font-size:12px}.activity span{font-size:11px;color:${C.muted};margin-top:2px}.empty{min-height:126px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:${C.muted};font-size:12px;text-align:center}.error{border:1px solid rgba(239,68,68,.35);background:rgba(239,68,68,.07);border-radius:12px;padding:18px;display:flex;align-items:center;gap:12px}.error div{flex:1}.error b,.error span{display:block}.error span{font-size:12px;color:${C.muted};margin-top:2px}.error button,.modal button{border:1px solid ${C.line};background:transparent;color:${C.text};padding:8px 11px;border-radius:7px;font-weight:700;cursor:pointer;display:flex;gap:6px;align-items:center}.scope-warning{margin-bottom:12px;border:1px solid rgba(244,205,77,.3);background:rgba(244,205,77,.07);color:#f9df78;font-size:11px;border-radius:8px;padding:9px;display:flex;align-items:center;gap:7px}.skeleton{display:grid;gap:12px}.skeleton>div{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.skeleton>div:nth-child(2){grid-template-columns:1.3fr .7fr}.skeleton>div:nth-child(3){grid-template-columns:repeat(3,1fr)}.skeleton i{height:126px;border-radius:12px;background:linear-gradient(100deg,${C.panel} 30%,#172747 50%,${C.panel} 70%);background-size:200% 100%;animation:shimmer 1.5s infinite}.skeleton>div:not(:first-child) i{height:210px}.overlay{position:fixed;inset:0;background:rgba(4,10,20,.78);backdrop-filter:blur(6px);z-index:10001;display:grid;place-items:center}.modal{position:relative;width:min(360px,calc(100vw - 30px));padding:25px;background:${C.panel};border:1px solid rgba(232,176,0,.3);border-radius:14px}.modal .x{position:absolute;right:12px;top:12px;padding:4px;border:0}.modal h2{margin:12px 0 5px;font-size:21px}.modal p{margin:0 0 20px;color:${C.muted};font-size:13px}.modal footer{display:flex;justify-content:flex-end;gap:8px}.modal .primary{background:${C.gold};border-color:${C.gold};color:${C.bg}}@keyframes pulse{50%{opacity:.4;transform:scale(.8)}}@keyframes badge-pop{50%{transform:scale(1.18)}}@keyframes shimmer{to{background-position:-200% 0}}@media(max-width:1100px){.bottom{grid-template-columns:1fr 1fr}.bottom .panel:last-child{grid-column:span 2}.primary-grid{grid-template-columns:1fr}}@media(max-width:820px){.shell aside{width:62px}.brand{padding:16px 14px}.brand div,.shell nav label,.logout label{display:none}.shell nav button,.logout{justify-content:center;padding:12px}.shell nav i{display:none}.kpis{grid-template-columns:1fr 1fr}.operations,.bottom{grid-template-columns:1fr}.bottom .panel:last-child{grid-column:auto}.skeleton>div,.skeleton>div:nth-child(2),.skeleton>div:nth-child(3){grid-template-columns:1fr 1fr}}@media(max-width:560px){main{padding:14px 12px}.arrival-alert{top:12px;right:14px}.kpis{gap:8px}.kpi{padding:10px}.kpi-icon{display:none}.kpi strong{font-size:24px}.kpi em{display:none}.head h1{font-size:22px}.tech,.attention{display:none}.live b{display:none}.timeline-row{grid-template-columns:57px 9px minmax(0,1fr)}.timeline-row .badge,.next-card>.badge{display:none}.next-card{grid-template-columns:auto 1fr}}
+`;
